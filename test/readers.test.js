@@ -8,6 +8,7 @@ const x = require('../scripts/platforms/x');
 const meta = require('../scripts/platforms/meta');
 const { fromMcp } = require('../scripts/platforms/tiktok-mcp');
 const { newCost } = require('../scripts/platforms/common');
+const { estimate } = require('../scripts/fetch');
 
 const realFetch = global.fetch;
 afterEach(() => { global.fetch = realFetch; });
@@ -114,17 +115,53 @@ test('X: the post is looked up, then replies get the replier from the user list;
   assert.equal(c.cost.xUsers, 2);
 });
 
-test('X: a post older than 7 days is skipped without searching', async () => {
-  const asked = fake([{ test: u => u.pathname.endsWith('/tweets/10'), body: () => ({ data: { id: '10', created_at: daysAgo(9), public_metrics: { reply_count: 40 } } }) }]);
-  const { records, skipped } = await x.read({ platform: 'x', own: true, url: 'https://x.com/me/status/10' }, ctx());
-  assert.equal(records.length, 0);
-  assert.match(skipped, /more than 7 days ago/);
-  assert.equal(asked.length, 1);
+test('X: replies to a post older than 7 days come from full-archive search, starting at the post\'s time', async () => {
+  const posted = daysAgo(9);
+  const asked = fake([
+    { test: u => u.pathname.endsWith('/tweets/10'), body: () => ({ data: { id: '10', created_at: posted, conversation_id: '10', public_metrics: { reply_count: 1 } } }) },
+    { test: u => u.pathname.endsWith('/tweets/search/all'), body: () => ({
+      data: [{ id: '11', text: 'Still waiting for my order', author_id: 'u1', created_at: daysAgo(8), public_metrics: { like_count: 4, reply_count: 0 }, referenced_tweets: [{ type: 'replied_to', id: '10' }] }],
+      includes: { users: [{ id: 'u1', name: 'One', username: 'one' }] }, meta: {}
+    }) }
+  ]);
+  const { records, skipped } = await x.read({ platform: 'x', own: true, url: 'https://x.com/me/status/10' }, ctx({ xArchiveGap: 0 }));
+  assert.equal(skipped, undefined);
+  assert.deepEqual(records.map(r => [r.comment_id, r.likes, r.author_handle]), [['11', 4, '@one']]);
+  const search = asked.find(u => u.pathname.endsWith('/tweets/search/all'));
+  assert.equal(search.searchParams.get('start_time'), posted);
+  assert.equal(search.searchParams.get('max_results'), '500');
+  assert.equal(asked.some(u => u.pathname.endsWith('/search/recent')), false);
 });
 
-test('X search never starts more than 7 days back', () => {
+test('X: if full-archive search is refused, the older post is skipped with X\'s reason', async () => {
+  fake([
+    { test: u => u.pathname.endsWith('/tweets/10'), body: () => ({ data: { id: '10', created_at: daysAgo(30), conversation_id: '10', public_metrics: { reply_count: 5 } } }) },
+    { test: u => u.pathname.endsWith('/tweets/search/all'), status: 403, body: () => ({ title: 'Client Forbidden', reason: 'client-not-enrolled' }) }
+  ]);
+  const { records, skipped } = await x.read({ platform: 'x', own: false, url: 'https://x.com/brand/status/10' }, ctx({ xArchiveGap: 0 }));
+  assert.equal(records.length, 0);
+  assert.match(skipped, /full-archive search/);
+  assert.match(skipped, /Client Forbidden, client-not-enrolled/);
+});
+
+test('X: recent search for posts inside its 7 days, full-archive search for older ones', () => {
   const now = Date.parse('2026-11-21T00:00:00Z');
   assert.equal(x.searchStart(now), new Date(now - 7 * 86400000 + 60000).toISOString());
+  const recent = x.searchFor(new Date(now - 6 * 86400000).toISOString(), now);
+  assert.deepEqual([recent.endpoint, recent.start, recent.pageSize], ['tweets/search/recent', x.searchStart(now), 100]);
+  const older = x.searchFor('2026-10-01T08:30:00.000Z', now);
+  assert.deepEqual([older.endpoint, older.start, older.pageSize], ['tweets/search/all', '2026-10-01T08:30:00.000Z', 500]);
+  assert.equal(x.searchFor(new Date(now - 7 * 86400000 + 30000).toISOString(), now).endpoint, 'tweets/search/all');
+});
+
+test('X plan: priced by the replies X shows, saying replies to replies can cost more; big posts are capped', () => {
+  const entry = { platform: 'x', route: 'official' };
+  const small = estimate(entry, { comments: 6 }, 30);
+  assert.match(small, /^about US\$0\.09 of X credit for the 6 replies X shows/);
+  assert.match(small, /replies to replies are read too at the same price, so it can cost more$/);
+  const big = estimate(entry, { comments: 5000 }, 30);
+  assert.match(big, /^at most about US\$45\.00 of X credit: X shows 5000 direct replies/);
+  assert.match(big, /the 3000 most relevant are read/);
 });
 
 test('Meta Instagram: the post is found among the account\'s own posts by the code in its link', async () => {

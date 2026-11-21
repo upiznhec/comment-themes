@@ -22,6 +22,15 @@ test('adding the same comment twice updates it instead of adding a copy', () => 
   assert.equal(saved.last_seen, '2026-11-22T00:00:00.000Z');
 });
 
+test('a later read fills in a parent that the first read left empty, and never empties one', () => {
+  const dir = tempDir();
+  addRecords([comment({ parent_id: null })], dir);
+  addRecords([comment({ parent_id: 'p1' })], dir);
+  assert.equal(readAll(dir)[0].parent_id, 'p1');
+  addRecords([comment({ parent_id: null })], dir);
+  assert.equal(readAll(dir)[0].parent_id, 'p1');
+});
+
 test('only the known fields are stored, so a gender or picture from a platform is dropped', () => {
   const dir = tempDir();
   addRecords([comment({ gender: 'female', profile_picture: 'https://example.com/a.jpg', author_name: 'Sample Name' })], dir);

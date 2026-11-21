@@ -46,7 +46,7 @@ Give the request a name (letters, digits, dots and dashes, such as `2026-11-21-l
 | Facebook Page | Official API (free; while the Meta app is in development mode it gives other people's comments **without who wrote them**) or ScrapeCreators (gives names) | ScrapeCreators |
 | Facebook profile in professional mode | ScrapeCreators only (the official API reads Pages, not profiles) | ScrapeCreators |
 | TikTok | The official TikTok Social connector (free; works with personal accounts) or ScrapeCreators | ScrapeCreators |
-| X | Official API (paid credit; posts from the last 7 days only) | Official API |
+| X | Official API (paid credit) | Official API |
 | Reddit | ScrapeCreators | ScrapeCreators |
 | Any | Paste comments or import a CSV (`scripts/import.js`) | same |
 
@@ -59,6 +59,8 @@ The first time the person sends their own Instagram, Facebook or TikTok post, ex
 }
 ```
 
+If they later ask to read their own posts on a platform another way, change `own_routes` in `data/choices.json` and set up only what the new route needs (section 4).
+
 ### 3. Check what is missing, then agree the cost
 Run `node scripts/fetch.js --run <name> --plan`. It lists each post with its number of comments, where the platform gives one, and what reading it costs (the plan itself is free, except about $0.005 for looking up each X post). It also names what is still missing:
 - "ask whether this ... post is the person's own" or "ask how to read the person's own ... posts": ask, update `request.json` or `choices.json`, and run the plan again.
@@ -69,7 +71,7 @@ Then tell them the cost (rule 4) and, with their OK, run `node scripts/fetch.js 
 ### 4. Keys and connections, only the ones a request needs
 - **ScrapeCreators**: they sign up at https://scrapecreators.com (100 free credits, no card; credits never expire; 1 credit per page of comments, about 10 to 20 comments), copy the API key from the dashboard, then `node scripts/save-secret.js scrapecreators`.
 - **YouTube**: an API key from Google Cloud (Credentials; Create credentials, API key; restrict it to YouTube Data API v3), then `node scripts/save-secret.js youtube`. 10,000 free units a day; 1 unit reads up to 100 comments.
-- **X**: at https://console.x.com they check their credit, create a **new** app and copy its Bearer Token, then `node scripts/save-secret.js x`. Never ask them to press Generate or Regenerate on an app they already have: it stops whatever uses the old token. No automatic top-ups. Only posts from the last 7 days can be read.
+- **X**: at https://console.x.com they check their credit, create a **new** app and copy its Bearer Token, then `node scripts/save-secret.js x`. Never ask them to press Generate or Regenerate on an app they already have: it stops whatever uses the old token. No automatic top-ups. Posts of any age can be read: replies to posts older than 7 days come from full-archive search, which pay-per-use accounts (credit bought at console.x.com) include. If X refuses it, fetch.js skips those posts and gives X's reason.
 - **Meta (Instagram and Facebook official)**: an Instagram professional account linked to a Facebook Page they manage, and their own Meta app in development mode (no App Review). They do every click (rule 3): at https://developers.facebook.com/apps create an app with the use case "Manage messaging & content on Instagram" (when asked about a business portfolio: "I don't want to connect a business portfolio yet"), and in Use cases, Customize, Permissions and features add `instagram_basic` and `instagram_manage_comments`. For Facebook, also add a use case for managing the Page with `pages_read_user_content`, and the feature "Business Asset User Profile Access". In Graph API Explorer they choose the app, add `instagram_basic, instagram_manage_comments, pages_show_list, pages_read_engagement, pages_read_user_content, business_management`, Generate Access Token, and choose their Page and Instagram account in the pop-up. Then `node scripts/meta-token.js` (app ID; app secret from App settings, Basic; the Explorer token). It saves a Page token that does not expire.
 - **TikTok Social connector** (official, https://business-api.tiktok.com/open_mcp/tt-ads-mcp-organic-social): no developer account or app; the person signs in with TikTok and authorizes; the authorization lasts a year. Explain how to add a remote MCP server **in your own app, following its current documentation**. Tested in the Claude app: Settings, Connectors, Add custom connector, the URL above, Connect, then in the chat's + menu, Connectors, switch it on. TikTok lists ChatGPT, Claude, Claude Code, Codex, Cursor, Gemini CLI and others. If your app cannot add a remote MCP server, say so and offer ScrapeCreators for their TikTok.
 
@@ -102,7 +104,11 @@ Answer from the database with `node scripts/find.js`: `--text "words"`, `--platf
 - Large analyses: a post with more than 1,000 comments is labelled on its 1,000 most-liked (see "The analysis"). The person's own questions (`find.js`) still count over every comment read, which costs no tokens for labels.
 - ScrapeCreators: the number of comments is not known before reading, so the plan gives a ceiling (at most `--max-pages` credits per post). Instagram succeeds about 9 times in 10 (ScrapeCreators' own figure); Instagram, TikTok and Facebook replies are not read (their count is kept); Reddit's comment count includes removed comments, so fewer come back.
 - TikTok connector: beyond 500 comments on one video, TikTok returns the rest by likes and may repeat some; the database keeps one copy of each.
-- X: posts older than 7 days are skipped; looking a post up costs about $0.005, each reply $0.005 and each different replier $0.010.
+- X: looking a post up costs about $0.005, each reply $0.005 and each different replier $0.010. The reply count X shows is of direct replies only; replies to replies are read too, so a thread can cost more than the plan's figure (in a test, a post showing 6 replies had 11). X does not charge again for a post or user read earlier the same UTC day (X calls this a soft guarantee). Replies to posts from the last 7 days come from recent search; replies to older posts come from full-archive search, which allows 1 request a second and 300 in 15 minutes (fetch.js waits between requests). If X answers HTTP 429 (too many requests), wait 15 minutes, then read only the posts that stopped with `fetch.js --run <name> --post <link>`; the other posts are already stored.
+
+## Updating it
+
+With git, run `git pull`; `data/` is not touched. Without git, download the new version into a new folder and copy `data/` into it, then ask before deleting the old folder. Run `npm test` afterwards, and `node scripts/check-keys.js` if they want to know their keys still work.
 
 ## Removing it
 

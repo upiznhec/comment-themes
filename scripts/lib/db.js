@@ -1,5 +1,6 @@
 // The comment database: data/comments.jsonl, one comment per line. A comment is known by platform and
-// comment ID, so reading the same post again updates likes and replies instead of adding a copy.
+// comment ID, so reading the same post again updates likes and replies instead of adding a copy. A later
+// read fills in a parent that an earlier read left empty, and never empties one.
 // Kept about each commenter: the name shown on the platform, the handle and the platform's ID, nothing
 // else (no pictures, no gender).
 const fs = require('fs');
@@ -11,7 +12,7 @@ const FIELDS = [
   'comment_id', 'parent_id', 'time', 'likes', 'replies', 'hidden', 'text',
   'author_name', 'author_handle', 'author_id', 'first_seen', 'last_seen'
 ];
-const UPDATABLE = ['likes', 'replies', 'hidden', 'text', 'author_name', 'author_handle', 'author_id', 'post_url', 'post_time', 'last_seen'];
+const UPDATABLE = ['parent_id', 'likes', 'replies', 'hidden', 'text', 'author_name', 'author_handle', 'author_id', 'post_url', 'post_time', 'last_seen'];
 
 function dbPath(dataDir = getDataDir()) {
   return path.join(dataDir, 'comments.jsonl');

@@ -48,7 +48,12 @@ const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 function estimate(entry, post, maxPages) {
   const n = post.comments;
   if (entry.route === 'scrapecreators') return `about 1 ScrapeCreators credit for every ${PER_PAGE[entry.platform]} comments, at most ${plural(maxPages, 'credit')} for this post (the count is known only after reading)`;
-  if (entry.platform === 'x') return `at most about US$${(n * 0.015).toFixed(2)} of X credit (${n} replies at $0.005, plus $0.010 for each different replier)`;
+  if (entry.platform === 'x') {
+    // X's count is of direct replies only; the conversation search also returns replies to replies.
+    const cap = maxPages * 100;
+    if (n > cap) return `at most about US$${(cap * 0.015).toFixed(2)} of X credit: X shows ${n} direct replies, more than the ${cap} replies read at most, so the ${cap} most relevant are read ($0.005 each, plus $0.010 for each different replier)`;
+    return `about US$${(n * 0.015).toFixed(2)} of X credit for the ${n} ${n === 1 ? 'reply' : 'replies'} X shows ($0.005 each, plus $0.010 for each different replier); X counts only direct replies, and replies to replies are read too at the same price, so it can cost more`;
+  }
   if (entry.platform === 'youtube') {
     const units = Math.min(Math.ceil(n / 100), maxPages) + 1;
     const partial = n > maxPages * 100 ? `; with more than ${maxPages * 100} comments it may be read only in part (up to ${maxPages * 100} comment threads, top comments first)` : '';
@@ -104,4 +109,6 @@ async function main() {
   console.log(`Cost of this run: ${costs.join('; ') || 'nothing'}.`);
 }
 
-main();
+if (require.main === module) main();
+
+module.exports = { estimate };
