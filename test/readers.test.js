@@ -249,3 +249,16 @@ test('Meta Facebook Page account: the Page\'s posts inside the time range, each 
   const { posts } = await meta.list({ platform: 'facebook', account: 'My Page', own: true }, ctx({ window: window(30) }));
   assert.deepEqual(posts.map(p => [p.id, p.comments]), [['99_3', 5]]);
 });
+
+test('a post with more comments than the page limit is read top comments first', async () => {
+  const asked = fake([{ test: u => u.pathname.endsWith('/commentThreads'), body: () => ({ items: [] }) }]);
+  await youtube.readVideo({ id: 'big', comments: 5000 }, { platform: 'youtube' }, ctx({ maxPages: 10 }));
+  await youtube.readVideo({ id: 'small', comments: 50 }, { platform: 'youtube' }, ctx({ maxPages: 10 }));
+  assert.deepEqual(asked.map(u => u.searchParams.get('order')), ['relevance', 'time']);
+  const searched = fake([
+    { test: u => u.pathname.endsWith('/tweets/20'), body: () => ({ data: { id: '20', created_at: daysAgo(1), conversation_id: '20', public_metrics: { reply_count: 4000 } } }) },
+    { test: u => u.pathname.endsWith('/tweets/search/recent'), body: () => ({ data: [], meta: {} }) }
+  ]);
+  await x.read({ platform: 'x', url: 'https://x.com/a/status/20' }, ctx({ maxPages: 10 }));
+  assert.equal(searched.find(u => u.pathname.endsWith('/search/recent')).searchParams.get('sort_order'), 'relevancy');
+});

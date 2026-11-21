@@ -81,11 +81,14 @@ function main() {
   }
   const authors = new Map(readAll(dataDir).map(r => [keyOf(r), r.author_id || r.author_handle || r.author_name || null]));
   const summary = summarize(comments, byId, authors);
+  const sampleFile = path.join(dir, 'sample.json');
+  summary.sample = fs.existsSync(sampleFile) ? JSON.parse(fs.readFileSync(sampleFile, 'utf8')) : null;
   fs.writeFileSync(path.join(dir, 'summary.json'), JSON.stringify(summary, null, 2) + '\n', { mode: 0o600 });
   const names = new Map(readAll(dataDir).map(r => [keyOf(r), r.author_name || r.author_handle || '']));
   const rows = comments.map(c => ({ ...c, bucket: byId.get(c.id).bucket, theme: byId.get(c.id).theme || '', author: names.get(c.key) || '' }));
   fs.writeFileSync(path.join(dir, 'labelled.csv'), toCsv(rows, ['id', 'platform', 'account', 'own', 'post_url', 'time', 'likes', 'bucket', 'theme', 'author', 'text']), { mode: 0o600 });
   console.log(`Run ${name}: ${summary.comments} comments, ${summary.useful} useful, ${summary.not_useful} not useful. Confidence by size: ${summary.confidence}.`);
+  if (summary.sample?.sampled) console.log(`Sample: these are ${summary.sample.comments_labelled} of ${summary.sample.comments_chosen} comments (${summary.sample.rule}). Say so in the report; the counts are of the sample.`);
   console.log('Buckets: ' + Object.entries(summary.buckets).filter(([, n]) => n).map(([b, n]) => `${b} ${n}`).join(', '));
   console.log('Top themes (comments / different people / likes):');
   for (const t of summary.themes.slice(0, 15)) {

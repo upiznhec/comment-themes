@@ -26,13 +26,16 @@ function searchStart(now = Date.now()) {
   return new Date(now - SEVEN_DAYS + 60000).toISOString();
 }
 
+// The replies to a post, up to maxPages pages of 100. A post with more replies than that is read most
+// relevant first (X's "relevancy" order), otherwise newest first.
 async function readConversation(post, conversationId, entry, ctx) {
   const items = [];
   const users = new Map();
   let nextToken = '';
+  const sortOrder = typeof post.comments === 'number' && post.comments > ctx.maxPages * 100 ? 'relevancy' : 'recency';
   for (let page = 0; page < ctx.maxPages; page += 1) {
     const params = {
-      query: `conversation_id:${conversationId} is:reply`, max_results: '100', start_time: searchStart(),
+      query: `conversation_id:${conversationId} is:reply`, max_results: '100', start_time: searchStart(), sort_order: sortOrder,
       'tweet.fields': 'author_id,created_at,public_metrics,in_reply_to_user_id,referenced_tweets,conversation_id',
       expansions: 'author_id', 'user.fields': 'username,name'
     };

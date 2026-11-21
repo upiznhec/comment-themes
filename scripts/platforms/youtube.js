@@ -45,12 +45,14 @@ function record(snippet, id, parentId, entry, post) {
   };
 }
 
-// All comments and replies of one video.
+// All comments and replies of one video, up to maxPages pages of 100 comment threads. A video with more
+// comments than that is read top comments first (YouTube's "relevance" order), otherwise newest first.
 async function readVideo(post, entry, ctx) {
   const records = [];
   let pageToken = '';
+  const order = typeof post.comments === 'number' && post.comments > ctx.maxPages * 100 ? 'relevance' : 'time';
   for (let page = 0; page < ctx.maxPages; page += 1) {
-    const params = { part: 'snippet,replies', videoId: post.id, maxResults: '100', order: 'time', textFormat: 'plainText' };
+    const params = { part: 'snippet,replies', videoId: post.id, maxResults: '100', order, textFormat: 'plainText' };
     if (pageToken) params.pageToken = pageToken;
     let body;
     try {

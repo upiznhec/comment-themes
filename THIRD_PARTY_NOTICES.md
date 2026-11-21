@@ -7,7 +7,7 @@
 - **Copyright:** Copyright (c) 2026 ScrapeCreators
 - **License:** MIT. The full license text, unchanged, is in `skills/comment-mining/LICENSE`.
 - **What we kept:** the overview, when to use it, the nine buckets, the workflow steps, the report format, the quality guardrails and the common pitfalls, largely word for word.
-- **What we changed:** the comments come from this repository's database (official APIs, the TikTok Social connector, ScrapeCreators' API or an import) instead of ScrapeCreators' API calls only; a `not_useful` bucket stands for the original's cleaning step; scripts count the labels (`scripts/tally.js`) and check every quote (`scripts/check-quotes.js`); a sentence on leaving commenters' names out of reports.
+- **What we changed:** the comments come from this repository's database (official APIs, the TikTok Social connector, ScrapeCreators' API or an import) instead of ScrapeCreators' API calls only; more than 1,000 comments are analysed on a sample (the 500 most-liked and 500 at random); a `not_useful` bucket stands for the original's cleaning step; scripts count the labels (`scripts/tally.js`) and check every quote (`scripts/check-quotes.js`); a sentence on leaving commenters' names out of reports.
 
 This project is not affiliated with, sponsored by or endorsed by ScrapeCreators. "ScrapeCreators" is used only to name the source and the service the scripts can call; using that service is subject to ScrapeCreators' own terms.
 

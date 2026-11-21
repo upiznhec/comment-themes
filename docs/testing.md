@@ -37,4 +37,13 @@ Checks:
 - Live run `dev-accounts`, past 30 days: YouTube @MrBeast 7 videos with 4,891 to 68,544 comments each (207,152 in all; the plan cost 3 free units); own Instagram 2 posts (7 and 0 comments); own Facebook Page 1 post (2). Reading the own accounts used the posts found by the plan; MrBeast was read one page per video without replies (729 comments stored, 7 units). `prepare.js` took 738 comments for the request.
 - Found: a large account is far beyond what can be labelled in one analysis (207,152 comments would be about 3 million tokens of text before any labels); a default sample for large requests is to be decided.
 
+## 2026-11-21, change: large posts and large analyses
+
+The user agreed two defaults for large requests: a post with more comments than the page limit is read top comments first (YouTube "relevance", X "relevancy"), and an analysis of more than 1,000 comments labels a sample of the 500 most-liked and 500 others at random (the same run name draws the same sample), recorded in `sample.json` and `summary.json` so the report can say how many of how many were labelled. The person's own questions (`find.js`) still count over every comment read.
+
+Checks:
+- `npm test`: 33 tests pass (the sample, and the order used for large posts on YouTube and X).
+- One MrBeast video (68,540 comments), one page each way: the top-comments page had a median of 242 likes per comment (25th percentile 58); the newest-first page read earlier had a median of 0. 2 free YouTube units.
+- `prepare.js --run dev-sample --max 200` over the 1,234 stored comments: 100 most-liked and 100 at random, written to `sample.json`.
+
 Still to do: the three-agent tests (Codex, Claude Code, DeepSeek Harness) with the new setup request and a series of ordinary requests.

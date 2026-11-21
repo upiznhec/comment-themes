@@ -2,12 +2,16 @@
 
 // Chooses the comments for an analysis and writes them as batches for the agent to label.
 // Usage: node scripts/prepare.js --run <name> [--days <n> | --since <date>] [--platform <name>]
-//        [--post <link or part of one>]... [--own | --others] [--batch <size, default 150>]
+//        [--post <link or part of one>]... [--own | --others] [--max <n, default 1000> | --all]
+//        [--batch <size, default 150>]
+// More comments than --max are analysed on a sample: the most-liked half of --max, and the rest drawn at
+// random from the others (the same run name draws the same sample). sample.json records it for the report.
 // When the run has a request (data/runs/<name>/request.json), only the comments of its posts are taken: the
 // links it lists and the posts fetch.js found for its accounts (posts.json); posts with comments but none
 // stored yet are named. Without a request, the whole database is taken, narrowed by the options.
 // Writes data/runs/<name>/comments.jsonl and batch-01.jsonl, batch-02.jsonl ... (short ID, text, likes;
 // no names), and prints the buckets to label with.
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { getDataDir } = require('./lib/env-file');
@@ -22,6 +26,36 @@ function option(name) {
 
 function options(name) {
   return process.argv.flatMap((item, i) => (item === `--${name}` && process.argv[i + 1] ? [process.argv[i + 1]] : []));
+}
+
+// A repeatable random number source: the same text gives the same numbers.
+function seeded(text) {
+  let state = crypto.createHash('sha256').update(String(text)).digest().readUInt32LE(0);
+  return () => {
+    state = (state + 0x6D2B79F5) >>> 0;
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// At most max comments: the most-liked half, then the rest at random from the others. Returns
+// [{ record, pick: 'all' | 'liked' | 'random' }].
+function sample(records, max, seedText) {
+  if (!max || records.length <= max) return records.map(record => ({ record, pick: 'all' }));
+  const byLikes = [...records].sort((a, b) => (Number(b.likes) || 0) - (Number(a.likes) || 0));
+  const liked = byLikes.slice(0, Math.ceil(max / 2));
+  const rest = byLikes.slice(liked.length);
+  const random = seeded(seedText);
+  for (let i = rest.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(random() * (i + 1));
+    [rest[i], rest[j]] = [rest[j], rest[i]];
+  }
+  return [
+    ...liked.map(record => ({ record, pick: 'liked' })),
+    ...rest.slice(0, max - liked.length).map(record => ({ record, pick: 'random' }))
+  ];
 }
 
 // links: the request's post links (exact); posts: parts of links or post IDs (any one may match).
@@ -63,12 +97,21 @@ function main() {
     process.exit(1);
   }
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-  const width = Math.max(4, String(chosen.length).length);
-  const rows = chosen.map((r, i) => ({
+  const max = process.argv.includes('--all') ? 0 : Number(option('max') || 1000);
+  const picked = sample(chosen, max, name).sort((a, b) => String(a.record.time || '').localeCompare(String(b.record.time || '')));
+  const width = Math.max(4, String(picked.length).length);
+  const rows = picked.map(({ record: r, pick }, i) => ({
     id: `C${String(i + 1).padStart(width, '0')}`, key: keyOf(r), platform: r.platform, account: r.account, own: r.own,
-    post_url: r.post_url, time: r.time, likes: r.likes, reply: Boolean(r.parent_id), text: r.text
+    post_url: r.post_url, time: r.time, likes: r.likes, reply: Boolean(r.parent_id), pick, text: r.text
   }));
   fs.writeFileSync(path.join(dir, 'comments.jsonl'), rows.map(row => JSON.stringify(row)).join('\n') + '\n', { mode: 0o600 });
+  const sampled = rows.length < chosen.length;
+  const liked = rows.filter(row => row.pick === 'liked').length;
+  const info = {
+    comments_chosen: chosen.length, comments_labelled: rows.length, sampled,
+    rule: sampled ? `the ${liked} most-liked comments and ${rows.length - liked} others drawn at random` : 'every comment chosen'
+  };
+  fs.writeFileSync(path.join(dir, 'sample.json'), JSON.stringify(info, null, 2) + '\n', { mode: 0o600 });
   const size = Number(option('batch') || 150);
   let batches = 0;
   for (let i = 0; i < rows.length; i += size) {
@@ -76,7 +119,9 @@ function main() {
     const batch = rows.slice(i, i + size).map(row => JSON.stringify({ id: row.id, text: row.text, likes: row.likes }));
     fs.writeFileSync(path.join(dir, `batch-${String(batches).padStart(2, '0')}.jsonl`), batch.join('\n') + '\n', { mode: 0o600 });
   }
-  console.log(`Run ${name}: ${rows.length} comments in ${batches} batches, in ${dir}`);
+  console.log(sampled
+    ? `Run ${name}: a sample of ${rows.length} of the ${chosen.length} comments chosen (${info.rule}; --all labels every one, which costs many more tokens), in ${batches} batches, in ${dir}`
+    : `Run ${name}: ${rows.length} comments in ${batches} batches, in ${dir}`);
   console.log('Label every comment in every batch: one line per comment in labels.jsonl (or labels-01.jsonl ...), like');
   console.log('  {"id":"C0001","bucket":"questions","theme":"price of the travel size"}');
   console.log('Buckets:');
@@ -87,4 +132,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { select };
+module.exports = { sample, select };

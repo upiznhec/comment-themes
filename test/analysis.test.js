@@ -5,7 +5,7 @@ const { test } = require('node:test');
 const { check, summarize } = require('../scripts/tally');
 const { findQuote, quotesIn } = require('../scripts/check-quotes');
 const { matches } = require('../scripts/find');
-const { select } = require('../scripts/prepare');
+const { sample, select } = require('../scripts/prepare');
 
 const comments = [
   { id: 'C0001', key: 'yt:1', platform: 'youtube', likes: 10, text: 'Does this leave a white cast on dark skin?' },
@@ -71,4 +71,19 @@ test('choosing comments: a request takes only its own posts; parts of links narr
   assert.deepEqual(select(stored, { links }).map(r => r.text), ['one', 'two']);
   assert.deepEqual(select(stored, { posts: ['video/8'] }).map(r => r.text), ['three']);
   assert.deepEqual(select(stored, { own: true }).map(r => r.text), ['two', 'three']);
+});
+
+test('a large choice is sampled: the most-liked half, the rest at random, the same for the same run name', () => {
+  const many = Array.from({ length: 3000 }, (_, i) => ({ comment_id: `c${i}`, likes: i, text: `comment ${i}` }));
+  const picked = sample(many, 1000, 'run-a');
+  assert.equal(picked.length, 1000);
+  assert.equal(new Set(picked.map(p => p.record.comment_id)).size, 1000);
+  const liked = picked.filter(p => p.pick === 'liked').map(p => p.record.likes);
+  assert.equal(liked.length, 500);
+  assert.equal(Math.min(...liked), 2500);
+  assert.ok(picked.filter(p => p.pick === 'random').every(p => p.record.likes < 2500));
+  assert.deepEqual(sample(many, 1000, 'run-a').map(p => p.record.comment_id), picked.map(p => p.record.comment_id));
+  assert.notDeepEqual(sample(many, 1000, 'run-b').map(p => p.record.comment_id), picked.map(p => p.record.comment_id));
+  assert.ok(sample(many.slice(0, 800), 1000, 'run-a').every(p => p.pick === 'all'));
+  assert.equal(sample(many, 0, 'run-a').length, 3000);
 });

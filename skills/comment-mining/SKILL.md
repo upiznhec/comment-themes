@@ -8,6 +8,7 @@ license: MIT
 Copyright (c) 2026 ScrapeCreators, MIT License (full text in LICENSE in this folder; details in THIRD_PARTY_NOTICES.md).
 Not affiliated with or endorsed by ScrapeCreators. Changes: comments come from this repository's database
 (official APIs, the TikTok Social connector, ScrapeCreators or an import) instead of ScrapeCreators calls only;
+more than 1,000 comments are analysed on a sample;
 a not_useful bucket stands for the cleaning step; scripts do the counting and check the quotes. The buckets, the
 themes, the report format, the guardrails and the pitfalls are the original's. -->
 
@@ -33,7 +34,7 @@ From `data/comments.jsonl`, filled for each request (the post links and accounts
 
 ## Workflow
 
-1. **Choose the comments**: `node scripts/prepare.js --run <name>`. For a request it takes the comments of the request's posts; without one, the whole database and the person's filters. It writes batches of short IDs, text and likes, without names.
+1. **Choose the comments**: `node scripts/prepare.js --run <name>`. For a request it takes the comments of the request's posts; without one, the whole database and the person's filters. More than 1,000 comments are analysed on a sample (the 500 most-liked and 500 others at random); say so in the Summary, for example `Comments analyzed: 1,000 of 21,000 read (500 most-liked, 500 at random)`. It writes batches of short IDs, text and likes, without names.
 
 2. **Clean lightly** (while labelling)
    - Label obvious spam, emoji-only comments, tagged friends and off-topic comments `not_useful`.

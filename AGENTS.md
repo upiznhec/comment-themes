@@ -86,10 +86,10 @@ fetch.js only lists them. For their own TikTok account with a time range, first 
 A share link to a post of their Page (`pfbid...` or `/share/...`) is looked for among the Page's posts. If it is not found, fetch.js lists the Page's latest posts with their dates and first words: ask which one it is, and put that post's link in `request.json` instead.
 
 ### 7. The analysis
-1. `node scripts/prepare.js --run <name>`. It takes the comments of the request's posts and names any post with no comments stored (not read yet, nothing to read, or skipped).
+1. `node scripts/prepare.js --run <name>`. It takes the comments of the request's posts and names any post with no comments stored (not read yet, nothing to read, or skipped). More than 1,000 comments are analysed on a sample: the 500 most-liked and 500 others drawn at random. Use `--all` only if the person asks to label every comment, after telling them it uses many more tokens (about 15 tokens of text per comment, before the labels).
 2. Label every batch as `skills/comment-mining/SKILL.md` says, into `data/runs/<name>/labels.jsonl`.
 3. `node scripts/tally.js --run <name>` until it reports no problems.
-4. Write `data/runs/<name>/report.md` in the skill's format, with numbers from `summary.json` only and comment IDs after quotes.
+4. Write `data/runs/<name>/report.md` in the skill's format, with numbers from `summary.json` only and comment IDs after quotes. If `summary.json` has a sample, say in the summary how many comments were labelled of how many read, and how they were chosen; every count in the report is of the sample.
 5. `node scripts/check-quotes.js --run <name>`; fix every quote it does not find.
 6. Tell them where the report and `labelled.csv` (every comment with its bucket and theme, to check or filter) are, and the main points in a few lines. Then give two or three examples of questions they can ask you, such as "How many people asked about the price?" or "Show me every complaint about shipping".
 
@@ -104,7 +104,8 @@ Answer from the database with `node scripts/find.js`: `--text "words"`, `--platf
 - YouTube: at most 5 replies come with each comment; the rest cost 1 more unit per 100 (read by default; `--no-replies` skips them). Videos with comments turned off are skipped with a note.
 - Instagram official: reads only posts of the Instagram account linked to the person's Page.
 - Facebook official, development mode: other people's comments come without name or ID (the comment written as the Page itself has them). The official route reads Pages only.
-- Large posts: at most `--max-pages` pages of comments are read per post (default 30: up to 3,000 comment threads on YouTube, about 300 to 500 comments through ScrapeCreators). The plan says when a post has more. YouTube allows 10,000 free units a day; a bigger read stops when they run out, and running it again the next day continues.
+- Large posts: at most `--max-pages` pages of comments are read per post (default 30: up to 3,000 comment threads on YouTube, about 300 to 500 comments through ScrapeCreators). The plan says when a post has more. Such posts are read top comments first on YouTube and most relevant first on X; ScrapeCreators returns comments in the order it gets them from the platform. With the TikTok connector, for a video with more than 900 comments use `sort_field: "likes"`, `sort_order: "desc"` and stop after 30 pages. YouTube allows 10,000 free units a day; a bigger read stops when they run out, and running it again the next day continues.
+- Large analyses: more than 1,000 comments are labelled as a sample (see "The analysis"). The person's own questions (`find.js`) still count over every comment read, which costs no tokens for labels.
 - ScrapeCreators: for a post link, the number of comments is not known before reading, so the plan gives a ceiling (at most `--max-pages` credits per post); for an account's posts the counts come with the list. Instagram succeeds about 9 times in 10 (ScrapeCreators' own figure); Instagram, TikTok and Facebook replies are not read (their count is kept); Reddit's comment count includes removed comments, so fewer come back.
 - TikTok connector: beyond 500 comments on one video, TikTok returns the rest by likes and may repeat some; the database keeps one copy of each.
 - X: only posts from the last 7 days can be found and read (older ones are left out); each post found or looked up costs about $0.005, each reply $0.005 and each different replier $0.010.
