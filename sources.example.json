@@ -1,0 +1,15 @@
+{
+  "days": 7,
+  "accounts": [
+    { "platform": "youtube", "account": "@yourchannel", "own": true },
+    { "platform": "instagram", "account": "yourbrand", "own": true, "route": "official" },
+    { "platform": "facebook", "account": "Your Page", "own": true, "route": "official" },
+    { "platform": "tiktok", "account": "yourbrand", "own": true, "route": "mcp" },
+    { "platform": "x", "account": "yourbrand", "own": true },
+    { "platform": "instagram", "account": "anotherbrand", "own": false }
+  ],
+  "posts": [
+    { "url": "https://www.youtube.com/watch?v=VIDEO_ID" },
+    { "url": "https://www.reddit.com/r/SUBREDDIT/comments/POST_ID/TITLE/" }
+  ]
+}
