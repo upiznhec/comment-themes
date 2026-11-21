@@ -2,10 +2,11 @@
 
 // Chooses the comments for an analysis and writes them as batches for the agent to label.
 // Usage: node scripts/prepare.js --run <name> [--days <n> | --since <date>] [--platform <name>]
-//        [--post <link or part of one>]... [--own | --others] [--max <n, default 1000> | --all]
+//        [--post <link or part of one>]... [--own | --others] [--max <n per post, default 1000> | --all]
 //        [--batch <size, default 150>]
-// More comments than --max are analysed on a sample: the --max most-liked comments (ScrapeCreators' YouTube
-// comments endpoint likewise returns at most about 1,000 top comments). sample.json records it for the report.
+// A post with more comments than --max is analysed on its --max most-liked comments, the same limit per post as
+// ScrapeCreators' YouTube comments endpoint (at most about 1,000 top comments a video). sample.json records which
+// posts were cut, for the report.
 // When the run has a request (data/runs/<name>/request.json), only the comments of its posts are taken, and
 // posts with no comments stored yet are named. Without a request, the whole database is taken, narrowed by
 // the options.
@@ -18,6 +19,8 @@ const { keyOf, readAll } = require('./lib/db');
 const { BUCKETS, runDir } = require('./lib/runs');
 const { requestLinks } = require('./lib/sources');
 
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
 function option(name) {
   const i = process.argv.indexOf(`--${name}`);
   return i >= 0 ? process.argv[i + 1] : undefined;
@@ -27,14 +30,24 @@ function options(name) {
   return process.argv.flatMap((item, i) => (item === `--${name}` && process.argv[i + 1] ? [process.argv[i + 1]] : []));
 }
 
-// At most max comments: the most-liked ones (equal likes keep their order). Returns
-// [{ record, pick: 'all' | 'liked' }].
+// At most max comments from each post: a post with more keeps its most-liked ones (equal likes keep their
+// order). Returns { picked: [{ record, pick: 'all' | 'liked' }], cut: [{ post_url, comments, kept }] }.
 function sample(records, max) {
-  if (!max || records.length <= max) return records.map(record => ({ record, pick: 'all' }));
-  return [...records]
-    .sort((a, b) => (Number(b.likes) || 0) - (Number(a.likes) || 0))
-    .slice(0, max)
-    .map(record => ({ record, pick: 'liked' }));
+  const byPost = new Map();
+  for (const record of records) {
+    const post = record.post_url || record.post_id || '(no post link)';
+    if (!byPost.has(post)) byPost.set(post, []);
+    byPost.get(post).push(record);
+  }
+  const picked = [];
+  const cut = [];
+  for (const [post, list] of byPost) {
+    if (!max || list.length <= max) { list.forEach(record => picked.push({ record, pick: 'all' })); continue; }
+    [...list].sort((a, b) => (Number(b.likes) || 0) - (Number(a.likes) || 0)).slice(0, max)
+      .forEach(record => picked.push({ record, pick: 'liked' }));
+    cut.push({ post_url: post, comments: list.length, kept: max });
+  }
+  return { picked, cut };
 }
 
 // links: the request's post links (exact); posts: parts of links or post IDs (any one may match).
@@ -76,17 +89,19 @@ function main() {
   }
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   const max = process.argv.includes('--all') ? 0 : Number(option('max') || 1000);
-  const picked = sample(chosen, max).sort((a, b) => String(a.record.time || '').localeCompare(String(b.record.time || '')));
+  const { picked: chosenPicks, cut } = sample(chosen, max);
+  const picked = chosenPicks.sort((a, b) => String(a.record.time || '').localeCompare(String(b.record.time || '')));
   const width = Math.max(4, String(picked.length).length);
   const rows = picked.map(({ record: r, pick }, i) => ({
     id: `C${String(i + 1).padStart(width, '0')}`, key: keyOf(r), platform: r.platform, account: r.account, own: r.own,
     post_url: r.post_url, time: r.time, likes: r.likes, reply: Boolean(r.parent_id), pick, text: r.text
   }));
   fs.writeFileSync(path.join(dir, 'comments.jsonl'), rows.map(row => JSON.stringify(row)).join('\n') + '\n', { mode: 0o600 });
-  const sampled = rows.length < chosen.length;
+  const sampled = cut.length > 0;
   const info = {
     comments_chosen: chosen.length, comments_labelled: rows.length, sampled,
-    rule: sampled ? `the ${rows.length} most-liked comments` : 'every comment chosen'
+    rule: sampled ? `the ${max} most-liked comments of each post that has more (${cut.length} of ${new Set(chosen.map(r => r.post_url || r.post_id || '(no post link)')).size} posts); every comment of the others` : 'every comment chosen',
+    posts_cut: cut
   };
   fs.writeFileSync(path.join(dir, 'sample.json'), JSON.stringify(info, null, 2) + '\n', { mode: 0o600 });
   const size = Number(option('batch') || 150);
@@ -96,9 +111,12 @@ function main() {
     const batch = rows.slice(i, i + size).map(row => JSON.stringify({ id: row.id, text: row.text, likes: row.likes }));
     fs.writeFileSync(path.join(dir, `batch-${String(batches).padStart(2, '0')}.jsonl`), batch.join('\n') + '\n', { mode: 0o600 });
   }
-  console.log(sampled
-    ? `Run ${name}: a sample of ${rows.length} of the ${chosen.length} comments chosen (${info.rule}; --all labels every one, which costs many more tokens), in ${batches} batches, in ${dir}`
-    : `Run ${name}: ${rows.length} comments in ${batches} batches, in ${dir}`);
+  console.log(`Run ${name}: ${rows.length} comments to label in ${batches} batches, in ${dir}`);
+  if (sampled) {
+    console.log(`${plural(cut.length, 'post')} had more than ${max} comments, so only ${cut.length === 1 ? 'its' : 'their'} ${max} most-liked are included (${chosen.length} comments chosen in all; --all includes every one, which costs many more tokens):`);
+    cut.forEach(post => console.log(`  ${post.post_url}: ${post.kept} of ${post.comments}`));
+  }
+  console.log(`Tell the person you will label ${rows.length} comments before you start.`);
   console.log('Label every comment in every batch: one line per comment in labels.jsonl (or labels-01.jsonl ...), like');
   console.log('  {"id":"C0001","bucket":"questions","theme":"price of the travel size"}');
   console.log('Buckets:');

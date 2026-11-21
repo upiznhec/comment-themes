@@ -73,15 +73,17 @@ test('choosing comments: a request takes only its own posts; parts of links narr
   assert.deepEqual(select(stored, { own: true }).map(r => r.text), ['two', 'three']);
 });
 
-test('a large choice keeps the 1,000 most-liked comments; a small one keeps every comment', () => {
-  const many = Array.from({ length: 3000 }, (_, i) => ({ comment_id: `c${i}`, likes: i % 7 === 0 ? null : i, text: `comment ${i}` }));
-  const picked = sample(many, 1000);
-  assert.equal(picked.length, 1000);
-  assert.equal(new Set(picked.map(p => p.record.comment_id)).size, 1000);
-  assert.ok(picked.every(p => p.pick === 'liked'));
-  const kept = new Set(picked.map(p => p.record.comment_id));
-  const lowestKept = Math.min(...picked.map(p => p.record.likes));
-  assert.ok(many.filter(c => !kept.has(c.comment_id)).every(c => (c.likes || 0) <= lowestKept));
-  assert.ok(sample(many.slice(0, 800), 1000).every(p => p.pick === 'all'));
-  assert.equal(sample(many, 0).length, 3000);
+test('each post keeps at most its 1,000 most-liked comments; smaller posts keep every comment', () => {
+  const big = Array.from({ length: 3000 }, (_, i) => ({ comment_id: `b${i}`, post_url: 'https://youtu.be/BIG', likes: i % 7 === 0 ? null : i * 10, text: `big ${i}` }));
+  const small = Array.from({ length: 40 }, (_, i) => ({ comment_id: `s${i}`, post_url: 'https://www.instagram.com/p/SMALL/', likes: 0, text: `small ${i}` }));
+  const { picked, cut } = sample([...big, ...small], 1000);
+  assert.equal(picked.length, 1040);
+  assert.deepEqual(cut, [{ post_url: 'https://youtu.be/BIG', comments: 3000, kept: 1000 }]);
+  assert.equal(picked.filter(p => p.pick === 'all').length, 40);
+  const keptBig = picked.filter(p => p.pick === 'liked').map(p => p.record);
+  const lowest = Math.min(...keptBig.map(r => r.likes));
+  const keptIds = new Set(keptBig.map(r => r.comment_id));
+  assert.ok(big.filter(c => !keptIds.has(c.comment_id)).every(c => (c.likes || 0) <= lowest));
+  assert.equal(sample(big, 0).picked.length, 3000);
+  assert.equal(sample(small, 1000).cut.length, 0);
 });

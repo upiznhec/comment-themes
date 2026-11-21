@@ -8,7 +8,7 @@ license: MIT
 Copyright (c) 2026 ScrapeCreators, MIT License (full text in LICENSE in this folder; details in THIRD_PARTY_NOTICES.md).
 Not affiliated with or endorsed by ScrapeCreators. Changes: comments come from this repository's database
 (official APIs, the TikTok Social connector, ScrapeCreators or an import) instead of ScrapeCreators calls only;
-more than 1,000 comments are analysed on the 1,000 most-liked;
+a post with more than 1,000 comments is analysed on its 1,000 most-liked;
 a not_useful bucket stands for the cleaning step; scripts do the counting and check the quotes. The buckets, the
 themes, the report format, the guardrails and the pitfalls are the original's. -->
 
@@ -34,7 +34,7 @@ From `data/comments.jsonl`, filled for each request (the post links in `data/run
 
 ## Workflow
 
-1. **Choose the comments**: `node scripts/prepare.js --run <name>`. For a request it takes the comments of the request's posts; without one, the whole database and the person's filters. More than 1,000 comments are analysed on the 1,000 most-liked; say so in the Summary, for example `Comments analyzed: the 1,000 most-liked of 21,000 read`. It writes batches of short IDs, text and likes, without names.
+1. **Choose the comments**: `node scripts/prepare.js --run <name>`. For a request it takes the comments of the request's posts; without one, the whole database and the person's filters. A post with more than 1,000 comments is analysed on its 1,000 most-liked; say so in the Summary, for example `Comments analyzed: 1,240 (the 1,000 most-liked of the 3,000 read on one video, and all 240 on the other posts)`. It writes batches of short IDs, text and likes, without names.
 
 2. **Clean lightly** (while labelling)
    - Label obvious spam, emoji-only comments, tagged friends and off-topic comments `not_useful`.

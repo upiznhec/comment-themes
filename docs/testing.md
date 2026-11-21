@@ -58,4 +58,10 @@ The user chose the sampling rule: when a request's comments add up to more than 
 
 Checks: `npm test`, 26 tests pass; `prepare.js --run dev-top200 --max 200` over the 1,234 stored comments kept the 200 most-liked, and no comment left out had more likes than the lowest one kept.
 
+## 2026-11-21, change: the limit is per post
+
+The user asked whether the 1,000 limit counted all links together or each platform, and chose each post: a post with more than 1,000 comments is analysed on its own 1,000 most-liked, which is how ScrapeCreators' YouTube endpoint limits a video. A limit over all links together let the platform with the largest like counts (YouTube) take every place, since likes are not comparable across platforms. `prepare.js` prints which posts were cut and asks the agent to tell the person how many comments it will label.
+
+Checks: `npm test`, 26 tests pass; `prepare.js --run dev-perpost --max 100` over the 1,234 stored comments cut the posts with more than 100 comments to their 100 most-liked and kept every comment of the smaller posts.
+
 Still to do: the three-agent tests (Codex, Claude Code, DeepSeek Harness) with the new setup request and a series of ordinary requests.
