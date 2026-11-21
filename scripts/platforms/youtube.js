@@ -1,8 +1,8 @@
-// YouTube through the official YouTube Data API (YOUTUBE_API_KEY): any public video or channel, the person's own
-// or not. Each request costs 1 unit of the project's 10,000 a day: a channel or video lookup, a page of 50
-// uploads, a page of 100 comment threads, a page of 100 replies.
+// YouTube through the official YouTube Data API (YOUTUBE_API_KEY): any public video, the person's own or not.
+// Each request costs 1 unit of the project's 10,000 a day: a video lookup, a page of 100 comment threads,
+// a page of 100 replies.
 const { getJson } = require('../lib/http');
-const { before, inside, postInfo, toIso } = require('./common');
+const { postInfo, toIso } = require('./common');
 
 const API = 'https://www.googleapis.com/youtube/v3/';
 
@@ -100,50 +100,4 @@ async function read(entry, ctx) {
   return { posts: [post], records: await readVideo(post, withChannel, ctx) };
 }
 
-// A channel given as @handle, a channel ID (UC...) or a channel link.
-function channelParams(account) {
-  const text = String(account).trim();
-  const fromUrl = text.match(/youtube\.com\/(?:channel\/(UC[\w-]{20,})|(@[\w.-]+))/i);
-  if (fromUrl) return fromUrl[1] ? { id: fromUrl[1] } : { forHandle: fromUrl[2] };
-  if (/^UC[\w-]{20,}$/.test(text)) return { id: text };
-  return { forHandle: text.startsWith('@') ? text : `@${text}` };
-}
-
-// The channel's videos published in the window, with their comment counts.
-async function list(account, ctx) {
-  const channel = (await yt('channels', { part: 'contentDetails,snippet', ...channelParams(account.account) }, ctx)).items?.[0];
-  if (!channel) throw new Error(`YouTube: no channel found for ${account.account}`);
-  const uploads = channel.contentDetails.relatedPlaylists.uploads;
-  const videos = [];
-  let pageToken = '';
-  for (let page = 0; page < ctx.listPages; page += 1) {
-    const params = { part: 'contentDetails', playlistId: uploads, maxResults: '50' };
-    if (pageToken) params.pageToken = pageToken;
-    const body = await yt('playlistItems', params, ctx);
-    const items = body.items || [];
-    for (const item of items) {
-      const published = item.contentDetails.videoPublishedAt;
-      if (published && inside(published, ctx.window)) videos.push({ id: item.contentDetails.videoId, time: published });
-    }
-    pageToken = body.nextPageToken;
-    if (!pageToken || before(items[items.length - 1]?.contentDetails?.videoPublishedAt, ctx.window)) break;
-  }
-  for (let i = 0; i < videos.length; i += 50) {
-    const stats = await yt('videos', { part: 'statistics', id: videos.slice(i, i + 50).map(v => v.id).join(',') }, ctx);
-    for (const item of stats.items || []) {
-      const video = videos.find(v => v.id === item.id);
-      if (video) video.comments = item.statistics.commentCount === undefined ? 0 : Number(item.statistics.commentCount);
-    }
-  }
-  return {
-    account: channel.snippet?.title || account.account,
-    posts: videos.map(v => postInfo('youtube', v.id, `https://www.youtube.com/watch?v=${v.id}`, v.time, v.comments ?? null))
-  };
-}
-
-// The comments of a video found by list().
-async function comments(post, entry, ctx) {
-  return readVideo(post, entry, ctx);
-}
-
-module.exports = { comments, list, read, readVideo, videoIdFromUrl };
+module.exports = { read, readVideo, videoIdFromUrl };

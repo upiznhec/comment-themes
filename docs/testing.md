@@ -46,4 +46,10 @@ Checks:
 - One MrBeast video (68,540 comments), one page each way: the top-comments page had a median of 242 likes per comment (25th percentile 58); the newest-first page read earlier had a median of 0. 2 free YouTube units.
 - `prepare.js --run dev-sample --max 200` over the 1,234 stored comments: 100 most-liked and 100 at random, written to `sample.json`.
 
+## 2026-11-21, change: accounts removed again
+
+The user checked the research for any wish to look at a whole account. In the seven interviews only one participant looks at accounts (competitors' content, how it performs, what they say); nobody described analysing an account's comments. In the survey (n=102), 66 track competitor or peer accounts, but the option names their content and performance, not comments. With no evidence for the need, the user removed accounts and time ranges: a request lists post links only, as in comment-mining. The account code (listing a channel's or profile's posts in a time range) was taken out; the changes for large posts and large analyses stay.
+
+Checks: `npm test`, 26 tests pass; a request that still lists accounts is held back with the message to list posts instead.
+
 Still to do: the three-agent tests (Codex, Claude Code, DeepSeek Harness) with the new setup request and a series of ordinary requests.

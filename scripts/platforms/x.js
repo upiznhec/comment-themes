@@ -1,9 +1,8 @@
 // X through the official API with an app Bearer Token (X_BEARER_TOKEN). Paid per item read from the person's
-// credit at console.x.com: $0.005 a post (each post found or looked up, and each reply) and $0.010 a user.
-// Posts and replies are found by search, which covers only the last 7 days, so older posts are left out.
+// credit at console.x.com: $0.005 a post (the post itself and each reply) and $0.010 a user. Replies are found
+// by search, which covers only the last 7 days, so a post older than that is skipped.
 const { getJson } = require('../lib/http');
 const { postInfo, toIso } = require('./common');
-const { accountOfUrl } = require('../lib/sources');
 
 const API = 'https://api.x.com/2/';
 const SEVEN_DAYS = 7 * 86400000;
@@ -77,44 +76,4 @@ async function read(entry, ctx) {
   return { posts: [post], records: await readConversation(post, tweet.conversation_id || id, entry, ctx) };
 }
 
-// An account given as @handle, handle or profile link.
-function handleOf(account) {
-  const text = String(account).trim();
-  return (accountOfUrl(`${text}/status/0`) || text).replace(/^@/, '').replace(/^https?:\/\/(www\.)?(x|twitter)\.com\//i, '').split(/[/?]/)[0];
-}
-
-// The account's own posts (no replies or reposts) in the window, as far as the last 7 days reach.
-async function list(account, ctx) {
-  const handle = handleOf(account.account);
-  const floor = searchStart();
-  if (Date.parse(ctx.window.until) <= Date.parse(floor)) {
-    return { posts: [], skipped: 'the time range ended more than 7 days ago, and X search reaches only the last 7 days' };
-  }
-  if (Date.parse(ctx.window.since) < Date.parse(floor)) ctx.notes.push(`X @${handle}: only posts from the last 7 days can be found; earlier ones in the time range were left out`);
-  const posts = [];
-  let nextToken = '';
-  for (let page = 0; page < ctx.listPages; page += 1) {
-    const params = {
-      query: `from:${handle} -is:retweet -is:reply`, max_results: '100',
-      start_time: Date.parse(ctx.window.since) > Date.parse(floor) ? ctx.window.since : floor,
-      'tweet.fields': 'created_at,public_metrics,conversation_id'
-    };
-    if (Date.parse(ctx.window.until) < Date.now() - 60000) params.end_time = ctx.window.until;
-    if (nextToken) params.next_token = nextToken;
-    const body = await xget('tweets/search/recent', params, ctx);
-    for (const t of body.data || []) {
-      posts.push({ ...postInfo('x', t.id, `https://x.com/${handle}/status/${t.id}`, t.created_at, t.public_metrics?.reply_count ?? null), conversation: t.conversation_id || t.id });
-    }
-    ctx.cost.xPosts += (body.data || []).length;
-    nextToken = body.meta?.next_token;
-    if (!nextToken) break;
-  }
-  return { account: `@${handle}`, posts };
-}
-
-// The replies to a post found by list().
-async function comments(post, entry, ctx) {
-  return readConversation(post, post.conversation || post.id, entry, ctx);
-}
-
-module.exports = { comments, handleOf, list, read, searchStart, tweetIdFromUrl };
+module.exports = { read, searchStart, tweetIdFromUrl };

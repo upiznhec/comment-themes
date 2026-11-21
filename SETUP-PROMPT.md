@@ -14,7 +14,6 @@ Send a request like these whenever you want comments sorted, with your own links
 
 - Sort the comments on these posts into themes: [link] [link]. They are my posts.
 - What are people asking under this video? [link] It is not mine.
-- Sort the comments on this account's videos into themes. Account: YouTube @MrBeast (not mine). Time: the past 30 days.
 
 After an analysis, ask your own questions, for example: How many people asked about the price?
 

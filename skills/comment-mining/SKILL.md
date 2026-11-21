@@ -30,7 +30,7 @@ Use this skill when the person asks to:
 
 ## Where the comments come from
 
-From `data/comments.jsonl`, filled for each request (the post links and accounts in `data/runs/<name>/request.json`) by `scripts/fetch.js` (YouTube, Instagram, Facebook, X, Reddit, TikTok through ScrapeCreators) and `scripts/import.js` (TikTok through the TikTok Social connector, pasted comments, CSV files). AGENTS.md says how each source is set up. Do not read comments any other way.
+From `data/comments.jsonl`, filled for each request (the post links in `data/runs/<name>/request.json`) by `scripts/fetch.js` (YouTube, Instagram, Facebook, X, Reddit, TikTok through ScrapeCreators) and `scripts/import.js` (TikTok through the TikTok Social connector, pasted comments, CSV files). AGENTS.md says how each source is set up. Do not read comments any other way.
 
 ## Workflow
 

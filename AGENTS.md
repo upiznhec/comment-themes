@@ -1,6 +1,6 @@
 # Instructions for AI agents
 
-This repository sorts the comments on social media posts into themes (audience questions, objections, complaints, praise, requests, buying intent and more), with counts and exact quotes. The person sends post links, or accounts with a time range; you read every comment of those posts (for an account, of every post it published in the range), label the comments and write the report. The analysis follows `skills/comment-mining/SKILL.md` (adapted from ScrapeCreators' comment-mining, MIT). Scripts read the comments, count the labels and check the quotes.
+This repository sorts the comments on social media posts into themes (audience questions, objections, complaints, praise, requests, buying intent and more), with counts and exact quotes. The person sends post links; you read every comment of those posts, label the comments and write the report. The analysis follows `skills/comment-mining/SKILL.md` (adapted from ScrapeCreators' comment-mining, MIT). Scripts read the comments, count the labels and check the quotes.
 
 Everything the person's data needs stays in `data/` (ignored by git): keys in `data/.env`, the person's remembered choices in `data/choices.json`, the comments in `data/comments.jsonl`, and one folder per request in `data/runs/`.
 
@@ -16,32 +16,26 @@ Everything the person's data needs stays in `data/` (ignored by git): keys in `d
 
 ## Setting up
 
-When the person asks you to set this up, download the repository (with git, or as a ZIP if git is not available) and run `npm test` to check that Node.js 20 or newer works. Then tell them in two or three sentences how to use it: send post links, or accounts with a time range (YouTube, Instagram, Facebook, TikTok, X; Reddit by post link only), and say which are their own. Ask nothing else now: routes and keys are settled the first time a request needs them. If the setup message already contains a request, go on with it.
+When the person asks you to set this up, download the repository (with git, or as a ZIP if git is not available) and run `npm test` to check that Node.js 20 or newer works. Then tell them in two or three sentences how to use it: send the links of the posts whose comments they want sorted (YouTube, Instagram, Facebook, TikTok, X or Reddit), and say which posts are their own. Ask nothing else now: routes and keys are settled the first time a request needs them. If the setup message already contains a request, go on with it.
 
 ## Each request
 
 ### 1. Write the request
-Give the request a name (letters, digits, dots and dashes, such as `2026-11-21-launch`) and write it to `data/runs/<name>/request.json`, with post links under `"posts"`, accounts under `"accounts"`, or both:
+Give the request a name (letters, digits, dots and dashes, such as `2026-11-21-launch`) and write its links to `data/runs/<name>/request.json`:
 
 ```json
 {
   "posts": [
     { "url": "https://www.instagram.com/p/POST_CODE/", "own": true },
+    { "url": "https://www.tiktok.com/@anotherbrand/video/VIDEO_ID", "own": false },
     { "url": "https://www.youtube.com/watch?v=VIDEO_ID" }
-  ],
-  "accounts": [
-    { "platform": "youtube", "account": "@MrBeast", "own": false },
-    { "platform": "tiktok", "account": "@yourbrand", "own": true }
-  ],
-  "time": { "days": 30 }
+  ]
 }
 ```
 
-- Every comment of each listed post is read. For an account, every post it published in the time range is read in full.
-- `"time"` is needed when there are accounts: `{ "days": 7 }` for the past 7 days, or `{ "from": "2026-10-18", "to": "2026-11-04" }` for whole days (on this computer's clock). If the person did not say, ask.
-- An account is a handle (`@name`), a profile link, or for YouTube a channel ID. Reddit has no accounts here: only post links.
-- `"own"` says whether the post or account is the person's own. It is required for Instagram, Facebook and TikTok, because it decides how they are read; if the person did not say, ask. Accounts listed under `own_accounts` in `data/choices.json` are theirs.
-- A post or account may carry `"route"` to override the remembered choice, for example `"scrapecreators"` for a post on their personal Facebook profile when their choice for Facebook is the official route, which reads Pages only.
+- `"own"` says whether the post is the person's own. It is required for Instagram, Facebook and TikTok links, because it decides how the post is read; if the person did not say, ask. Posts from accounts listed under `own_accounts` in `data/choices.json` are theirs.
+- Every comment of each post is read; there is no time window. If the person wants an account's latest posts, ask them for the links.
+- A post may carry `"route"` to override the remembered choice, for example `"scrapecreators"` for a post on their personal Facebook profile when their choice for Facebook is the official route, which reads Pages only.
 
 ### 2. How each post is read
 
@@ -66,7 +60,7 @@ The first time the person sends their own Instagram, Facebook or TikTok post, ex
 ```
 
 ### 3. Check what is missing, then agree the cost
-Run `node scripts/fetch.js --run <name> --plan`. It finds each account's posts in the time range and lists the posts with their number of comments, where the platform gives one, and what reading them costs. Finding posts is free on YouTube (quota units) and the official Meta routes; it costs 1 ScrapeCreators credit per page of an account's posts (about 12 Instagram or 30 TikTok posts) and about $0.005 per X post found or looked up. The posts it found are kept in `data/runs/<name>/posts.json`, so the read covers what the plan showed. It also names what is still missing:
+Run `node scripts/fetch.js --run <name> --plan`. It lists each post with its number of comments, where the platform gives one, and what reading it costs (the plan itself is free, except about $0.005 for looking up each X post). It also names what is still missing:
 - "ask whether this ... post is the person's own" or "ask how to read the person's own ... posts": ask, update `request.json` or `choices.json`, and run the plan again.
 - "key not saved yet": set up that key only (section 4), run `node scripts/check-keys.js`, and run the plan again.
 
@@ -80,7 +74,7 @@ Then tell them the cost (rule 4) and, with their OK, run `node scripts/fetch.js 
 - **TikTok Social connector** (official, https://business-api.tiktok.com/open_mcp/tt-ads-mcp-organic-social): no developer account or app; the person signs in with TikTok and authorizes; the authorization lasts a year. Explain how to add a remote MCP server **in your own app, following its current documentation**. Tested in the Claude app: Settings, Connectors, Add custom connector, the URL above, Connect, then in the chat's + menu, Connectors, switch it on. TikTok lists ChatGPT, Claude, Claude Code, Codex, Cursor, Gemini CLI and others. If your app cannot add a remote MCP server, say so and offer ScrapeCreators for their TikTok.
 
 ### 5. Their own TikTok videos through the connector
-fetch.js only lists them. For their own TikTok account with a time range, first call `account_user_post_list_get` (fields `item_id`, `create_time`, `comments`), passing `cursor` while `has_more` is true and the videos are not yet older than the range; add each video in the range to the request's `"posts"` as `https://www.tiktok.com/@<their handle>/video/<item_id>` with `"own": true`. For each video, take the video ID from the link (the digits after `/video/`), call `account_user_comment_list_get` (`video_id`, `include_replies: true`, `max_count: 30`) and pass `cursor` until `has_more` is false. Each comment comes with at most three replies; for a comment whose `replies` number is higher, call `account_user_comment_reply_list_get` (`video_id`, `comment_id`, `max_count: 30`) the same way. Save each answer as it came to `data/runs/<name>/tiktok-<video_id>-<page>.json` (replies: `tiktok-<video_id>-<comment_id>-<page>.json`) and run `node scripts/import.js --tiktok-mcp <file> --post <the link as written in request.json>` for each file. The import removes the profile picture links from the file.
+fetch.js only lists them. For each video, take the video ID from the link (the digits after `/video/`), call `account_user_comment_list_get` (`video_id`, `include_replies: true`, `max_count: 30`) and pass `cursor` until `has_more` is false. Each comment comes with at most three replies; for a comment whose `replies` number is higher, call `account_user_comment_reply_list_get` (`video_id`, `comment_id`, `max_count: 30`) the same way. Save each answer as it came to `data/runs/<name>/tiktok-<video_id>-<page>.json` (replies: `tiktok-<video_id>-<comment_id>-<page>.json`) and run `node scripts/import.js --tiktok-mcp <file> --post <the link as written in request.json>` for each file. The import removes the profile picture links from the file.
 
 ### 6. Facebook links the official route cannot match
 A share link to a post of their Page (`pfbid...` or `/share/...`) is looked for among the Page's posts. If it is not found, fetch.js lists the Page's latest posts with their dates and first words: ask which one it is, and put that post's link in `request.json` instead.
@@ -106,9 +100,9 @@ Answer from the database with `node scripts/find.js`: `--text "words"`, `--platf
 - Facebook official, development mode: other people's comments come without name or ID (the comment written as the Page itself has them). The official route reads Pages only.
 - Large posts: at most `--max-pages` pages of comments are read per post (default 30: up to 3,000 comment threads on YouTube, about 300 to 500 comments through ScrapeCreators). The plan says when a post has more. Such posts are read top comments first on YouTube and most relevant first on X; ScrapeCreators returns comments in the order it gets them from the platform. With the TikTok connector, for a video with more than 900 comments use `sort_field: "likes"`, `sort_order: "desc"` and stop after 30 pages. YouTube allows 10,000 free units a day; a bigger read stops when they run out, and running it again the next day continues.
 - Large analyses: more than 1,000 comments are labelled as a sample (see "The analysis"). The person's own questions (`find.js`) still count over every comment read, which costs no tokens for labels.
-- ScrapeCreators: for a post link, the number of comments is not known before reading, so the plan gives a ceiling (at most `--max-pages` credits per post); for an account's posts the counts come with the list. Instagram succeeds about 9 times in 10 (ScrapeCreators' own figure); Instagram, TikTok and Facebook replies are not read (their count is kept); Reddit's comment count includes removed comments, so fewer come back.
+- ScrapeCreators: the number of comments is not known before reading, so the plan gives a ceiling (at most `--max-pages` credits per post). Instagram succeeds about 9 times in 10 (ScrapeCreators' own figure); Instagram, TikTok and Facebook replies are not read (their count is kept); Reddit's comment count includes removed comments, so fewer come back.
 - TikTok connector: beyond 500 comments on one video, TikTok returns the rest by likes and may repeat some; the database keeps one copy of each.
-- X: only posts from the last 7 days can be found and read (older ones are left out); each post found or looked up costs about $0.005, each reply $0.005 and each different replier $0.010.
+- X: posts older than 7 days are skipped; looking a post up costs about $0.005, each reply $0.005 and each different replier $0.010.
 
 ## Removing it
 

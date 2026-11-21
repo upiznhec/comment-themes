@@ -3,7 +3,7 @@
 // Instagram gives each commenter's username and ID. Facebook, while the person's Meta app is in development
 // mode, gives the text of other people's comments but not who wrote them (tested 2026-11-21).
 const { getJson } = require('../lib/http');
-const { before, inside, postInfo, toIso } = require('./common');
+const { postInfo, toIso } = require('./common');
 
 const GRAPH = 'https://graph.facebook.com/v27.0/';
 
@@ -20,11 +20,11 @@ async function graph(pathOrUrl, params, ctx) {
   return body;
 }
 
-// Follows paging.next (it carries the token, so it is never printed) until found() or the page limit.
-async function pages(first, params, ctx, found, limit = ctx.maxPages) {
+// Follows paging.next (it carries the token, so it is never printed) until found() or maxPages.
+async function pages(first, params, ctx, found) {
   const items = [];
   let body = await graph(first, params, ctx);
-  for (let page = 0; page < limit; page += 1) {
+  for (let page = 0; page < ctx.maxPages; page += 1) {
     items.push(...(body.data || []));
     if (!body.paging?.next || (found && found(items))) break;
     body = await graph(body.paging.next, null, ctx);
@@ -70,19 +70,15 @@ async function readInstagram(entry, ctx) {
   if (!media) throw new Error(`Instagram: ${entry.url} is not a post of the Instagram account linked to your Page (the official route reads only that account's posts)`);
   const post = postInfo('instagram', media.id, entry.url, media.timestamp, media.comments_count ?? null);
   if (ctx.plan || !media.comments_count) return { posts: [post], records: [] };
-  return { posts: [post], records: await instagramComments(post, entry, ctx) };
-}
-
-async function instagramComments(post, entry, ctx) {
   const records = [];
-  const comments = await pages(`${post.id}/comments`, {
+  const comments = await pages(`${media.id}/comments`, {
     fields: 'id,text,timestamp,like_count,hidden,username,from,replies{id,text,timestamp,like_count,hidden,username,from}', limit: '50'
   }, ctx);
   for (const c of comments) {
     records.push(igRecord(c, null, entry, post));
     for (const reply of c.replies?.data || []) records.push(igRecord(reply, c.id, entry, post));
   }
-  return records;
+  return { posts: [post], records };
 }
 
 // Finds the Page post a link points to: by the number in the link, or for a share link by the same link
@@ -114,11 +110,7 @@ async function readFacebook(entry, ctx) {
   const summary = await graph(`${found.id}/comments`, { summary: 'true', limit: '0', filter: 'stream' }, ctx);
   const post = postInfo('facebook', found.id, entry.url, found.created_time, summary.summary?.total_count ?? null);
   if (ctx.plan || post.comments === 0) return { posts: [post], records: [] };
-  return { posts: [post], records: await facebookComments(post, entry, ctx) };
-}
-
-async function facebookComments(post, entry, ctx) {
-  const comments = await pages(`${post.id}/comments`, { fields: 'id,message,created_time,like_count,comment_count,from,parent{id}', filter: 'stream', limit: '100' }, ctx);
+  const comments = await pages(`${found.id}/comments`, { fields: 'id,message,created_time,like_count,comment_count,from,parent{id}', filter: 'stream', limit: '100' }, ctx);
   let withoutAuthor = 0;
   const records = comments.map(c => {
     if (!c.from) withoutAuthor += 1;
@@ -131,36 +123,11 @@ async function facebookComments(post, entry, ctx) {
     };
   });
   if (withoutAuthor) ctx.notes.push(`Facebook: ${withoutAuthor} comments came without the commenter's name (the Meta app is in development mode; ScrapeCreators gives names)`);
-  return records;
+  return { posts: [post], records };
 }
 
 async function read(entry, ctx) {
   return entry.platform === 'instagram' ? readInstagram(entry, ctx) : readFacebook(entry, ctx);
 }
 
-// The person's own posts in the window: the Instagram account linked to the saved Page, or the Page itself.
-async function list(account, ctx) {
-  const stop = time => items => items.length > 0 && before(time(items[items.length - 1]), ctx.window);
-  if (account.platform === 'instagram') {
-    const ig = ctx.env.IG_USER_ID;
-    if (!ig) throw new Error('Instagram: no Instagram account is linked to the saved Page. Link one and run meta-token.js again.');
-    const media = (await pages(`${ig}/media`, { fields: 'id,permalink,timestamp,comments_count', limit: '50' }, ctx, stop(m => m.timestamp), ctx.listPages))
-      .filter(m => inside(m.timestamp, ctx.window));
-    return { posts: media.map(m => postInfo('instagram', m.id, m.permalink, m.timestamp, m.comments_count ?? null)) };
-  }
-  const found = (await pages(`${ctx.env.META_PAGE_ID}/published_posts`, { fields: 'id,permalink_url,created_time', limit: '25' }, ctx, stop(p => p.created_time), ctx.listPages))
-    .filter(p => inside(p.created_time, ctx.window));
-  const posts = [];
-  for (const p of found) {
-    const summary = await graph(`${p.id}/comments`, { summary: 'true', limit: '0', filter: 'stream' }, ctx);
-    posts.push(postInfo('facebook', p.id, p.permalink_url, p.created_time, summary.summary?.total_count ?? null));
-  }
-  return { posts };
-}
-
-// The comments of a post found by list().
-async function comments(post, entry, ctx) {
-  return entry.platform === 'instagram' ? instagramComments(post, entry, ctx) : facebookComments(post, entry, ctx);
-}
-
-module.exports = { comments, facebookPostNumber, list, read, shortcodeOf };
+module.exports = { facebookPostNumber, read, shortcodeOf };
