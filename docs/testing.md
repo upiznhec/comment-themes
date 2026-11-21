@@ -52,4 +52,10 @@ The user checked the research for any wish to look at a whole account. In the se
 
 Checks: `npm test`, 26 tests pass; a request that still lists accounts is held back with the message to list posts instead.
 
+## 2026-11-21, change: the 1,000 most-liked comments
+
+The user chose the sampling rule: when a request's comments add up to more than 1,000, only the 1,000 most-liked are labelled, the same limit as ScrapeCreators' YouTube comments endpoint (at most about 1,000 top comments). This replaces the earlier mix of 500 most-liked and 500 at random. The report says it covers the 1,000 most-liked of the comments read; its counts lean towards the most popular comments. `find.js` still counts over every comment read.
+
+Checks: `npm test`, 26 tests pass; `prepare.js --run dev-top200 --max 200` over the 1,234 stored comments kept the 200 most-liked, and no comment left out had more likes than the lowest one kept.
+
 Still to do: the three-agent tests (Codex, Claude Code, DeepSeek Harness) with the new setup request and a series of ordinary requests.

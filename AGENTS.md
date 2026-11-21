@@ -80,10 +80,10 @@ fetch.js only lists them. For each video, take the video ID from the link (the d
 A share link to a post of their Page (`pfbid...` or `/share/...`) is looked for among the Page's posts. If it is not found, fetch.js lists the Page's latest posts with their dates and first words: ask which one it is, and put that post's link in `request.json` instead.
 
 ### 7. The analysis
-1. `node scripts/prepare.js --run <name>`. It takes the comments of the request's posts and names any post with no comments stored (not read yet, nothing to read, or skipped). More than 1,000 comments are analysed on a sample: the 500 most-liked and 500 others drawn at random. Use `--all` only if the person asks to label every comment, after telling them it uses many more tokens (about 15 tokens of text per comment, before the labels).
+1. `node scripts/prepare.js --run <name>`. It takes the comments of the request's posts and names any post with no comments stored (not read yet, nothing to read, or skipped). More than 1,000 comments are analysed on the 1,000 most-liked (the same limit as ScrapeCreators' YouTube comments endpoint, which returns at most about 1,000 top comments). Use `--all` only if the person asks to label every comment, after telling them it uses many more tokens (about 15 tokens of text per comment, before the labels).
 2. Label every batch as `skills/comment-mining/SKILL.md` says, into `data/runs/<name>/labels.jsonl`.
 3. `node scripts/tally.js --run <name>` until it reports no problems.
-4. Write `data/runs/<name>/report.md` in the skill's format, with numbers from `summary.json` only and comment IDs after quotes. If `summary.json` has a sample, say in the summary how many comments were labelled of how many read, and how they were chosen; every count in the report is of the sample.
+4. Write `data/runs/<name>/report.md` in the skill's format, with numbers from `summary.json` only and comment IDs after quotes. If `summary.json` has a sample, say in the summary that the report covers the 1,000 most-liked of the comments read (give both numbers); every count in the report is of those comments, which lean towards the most popular ones.
 5. `node scripts/check-quotes.js --run <name>`; fix every quote it does not find.
 6. Tell them where the report and `labelled.csv` (every comment with its bucket and theme, to check or filter) are, and the main points in a few lines. Then give two or three examples of questions they can ask you, such as "How many people asked about the price?" or "Show me every complaint about shipping".
 

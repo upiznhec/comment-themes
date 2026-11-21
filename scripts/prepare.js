@@ -4,14 +4,13 @@
 // Usage: node scripts/prepare.js --run <name> [--days <n> | --since <date>] [--platform <name>]
 //        [--post <link or part of one>]... [--own | --others] [--max <n, default 1000> | --all]
 //        [--batch <size, default 150>]
-// More comments than --max are analysed on a sample: the most-liked half of --max, and the rest drawn at
-// random from the others (the same run name draws the same sample). sample.json records it for the report.
+// More comments than --max are analysed on a sample: the --max most-liked comments (ScrapeCreators' YouTube
+// comments endpoint likewise returns at most about 1,000 top comments). sample.json records it for the report.
 // When the run has a request (data/runs/<name>/request.json), only the comments of its posts are taken, and
 // posts with no comments stored yet are named. Without a request, the whole database is taken, narrowed by
 // the options.
 // Writes data/runs/<name>/comments.jsonl and batch-01.jsonl, batch-02.jsonl ... (short ID, text, likes;
 // no names), and prints the buckets to label with.
-const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { getDataDir } = require('./lib/env-file');
@@ -28,34 +27,14 @@ function options(name) {
   return process.argv.flatMap((item, i) => (item === `--${name}` && process.argv[i + 1] ? [process.argv[i + 1]] : []));
 }
 
-// A repeatable random number source: the same text gives the same numbers.
-function seeded(text) {
-  let state = crypto.createHash('sha256').update(String(text)).digest().readUInt32LE(0);
-  return () => {
-    state = (state + 0x6D2B79F5) >>> 0;
-    let t = state;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-// At most max comments: the most-liked half, then the rest at random from the others. Returns
-// [{ record, pick: 'all' | 'liked' | 'random' }].
-function sample(records, max, seedText) {
+// At most max comments: the most-liked ones (equal likes keep their order). Returns
+// [{ record, pick: 'all' | 'liked' }].
+function sample(records, max) {
   if (!max || records.length <= max) return records.map(record => ({ record, pick: 'all' }));
-  const byLikes = [...records].sort((a, b) => (Number(b.likes) || 0) - (Number(a.likes) || 0));
-  const liked = byLikes.slice(0, Math.ceil(max / 2));
-  const rest = byLikes.slice(liked.length);
-  const random = seeded(seedText);
-  for (let i = rest.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(random() * (i + 1));
-    [rest[i], rest[j]] = [rest[j], rest[i]];
-  }
-  return [
-    ...liked.map(record => ({ record, pick: 'liked' })),
-    ...rest.slice(0, max - liked.length).map(record => ({ record, pick: 'random' }))
-  ];
+  return [...records]
+    .sort((a, b) => (Number(b.likes) || 0) - (Number(a.likes) || 0))
+    .slice(0, max)
+    .map(record => ({ record, pick: 'liked' }));
 }
 
 // links: the request's post links (exact); posts: parts of links or post IDs (any one may match).
@@ -97,7 +76,7 @@ function main() {
   }
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   const max = process.argv.includes('--all') ? 0 : Number(option('max') || 1000);
-  const picked = sample(chosen, max, name).sort((a, b) => String(a.record.time || '').localeCompare(String(b.record.time || '')));
+  const picked = sample(chosen, max).sort((a, b) => String(a.record.time || '').localeCompare(String(b.record.time || '')));
   const width = Math.max(4, String(picked.length).length);
   const rows = picked.map(({ record: r, pick }, i) => ({
     id: `C${String(i + 1).padStart(width, '0')}`, key: keyOf(r), platform: r.platform, account: r.account, own: r.own,
@@ -105,10 +84,9 @@ function main() {
   }));
   fs.writeFileSync(path.join(dir, 'comments.jsonl'), rows.map(row => JSON.stringify(row)).join('\n') + '\n', { mode: 0o600 });
   const sampled = rows.length < chosen.length;
-  const liked = rows.filter(row => row.pick === 'liked').length;
   const info = {
     comments_chosen: chosen.length, comments_labelled: rows.length, sampled,
-    rule: sampled ? `the ${liked} most-liked comments and ${rows.length - liked} others drawn at random` : 'every comment chosen'
+    rule: sampled ? `the ${rows.length} most-liked comments` : 'every comment chosen'
   };
   fs.writeFileSync(path.join(dir, 'sample.json'), JSON.stringify(info, null, 2) + '\n', { mode: 0o600 });
   const size = Number(option('batch') || 150);
