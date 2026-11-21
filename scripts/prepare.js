@@ -3,9 +3,9 @@
 // Chooses the comments for an analysis and writes them as batches for the agent to label.
 // Usage: node scripts/prepare.js --run <name> [--days <n> | --since <date>] [--platform <name>]
 //        [--post <link or part of one>]... [--own | --others] [--batch <size, default 150>]
-// When the run has a request (data/runs/<name>/request.json), only the comments of its posts are taken, and
-// posts with no comments stored yet are named. Without a request, the whole database is taken, narrowed by
-// the options.
+// When the run has a request (data/runs/<name>/request.json), only the comments of its posts are taken: the
+// links it lists and the posts fetch.js found for its accounts (posts.json); posts with comments but none
+// stored yet are named. Without a request, the whole database is taken, narrowed by the options.
 // Writes data/runs/<name>/comments.jsonl and batch-01.jsonl, batch-02.jsonl ... (short ID, text, likes;
 // no names), and prints the buckets to label with.
 const fs = require('fs');
@@ -13,7 +13,7 @@ const path = require('path');
 const { getDataDir } = require('./lib/env-file');
 const { keyOf, readAll } = require('./lib/db');
 const { BUCKETS, runDir } = require('./lib/runs');
-const { requestLinks } = require('./lib/sources');
+const { requestPosts } = require('./lib/sources');
 
 function option(name) {
   const i = process.argv.indexOf(`--${name}`);
@@ -45,13 +45,15 @@ function main() {
   const days = option('days');
   const since = option('since') ? new Date(option('since')).toISOString() : days ? new Date(Date.now() - Number(days) * 86400000).toISOString() : null;
   const own = process.argv.includes('--own') ? true : process.argv.includes('--others') ? false : null;
-  const requested = requestLinks(name, dataDir);
-  const links = requested ? new Set(requested) : null;
+  const request = requestPosts(name, dataDir);
+  const links = request ? new Set([...request.listed, ...request.found.map(post => post.url)]) : null;
   const chosen = select(readAll(dataDir), { since, platform: option('platform'), links, posts: options('post'), own })
     .sort((a, b) => String(a.time || '').localeCompare(String(b.time || '')));
-  if (requested) {
-    const empty = requested.filter(link => !chosen.some(r => String(r.post_url || '').trim() === link));
-    console.log(`Request ${name}: ${requested.length} posts.`);
+  if (request) {
+    const expected = [...request.listed, ...request.found.filter(post => post.comments !== 0).map(post => post.url)];
+    const stored = new Set(chosen.map(r => String(r.post_url || '').trim()));
+    const empty = [...new Set(expected)].filter(link => !stored.has(link));
+    console.log(`Request ${name}: ${request.listed.length} post links${request.found.length ? ` and ${request.found.length} posts found for its accounts` : ''}.`);
     if (empty.length) console.log(`No comments stored for these posts (not read yet, nothing to read, or skipped):\n${empty.map(link => `  ${link}`).join('\n')}`);
   }
   if (!chosen.length) { console.log('No comments match. Read some with fetch.js or import.js first, or widen the choice.'); process.exit(1); }

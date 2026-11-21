@@ -28,4 +28,13 @@ Checks:
 - `prepare.js --run dev-links` took the request's comments and named the two links with none; `find.js --post <video ID>` found the 4 TikTok comments.
 - Found: Meta's API gives Page posts numeric links (`/posts/<number>`), while a link copied in the browser can be a share link (`pfbid...`), which cannot be matched; the agent then asks which of the listed latest posts it is.
 
+## 2026-11-21, change: accounts with a time range
+
+The user kept accounts as a second kind of input: "analyse MrBeast's videos of the past month" means every post the account published in that range, with all its comments. A request now holds `accounts` and `time` (`{ "days": 30 }` or `{ "from": "2026-10-18", "to": "2026-11-04" }`) besides post links. The plan finds the posts and keeps them in `posts.json`, so the read covers what the plan showed; `prepare.js` takes the comments of both.
+
+Checks:
+- `npm test`: 31 tests pass (time ranges, accounts in requests, listing for YouTube, ScrapeCreators Instagram, X and the Facebook Page).
+- Live run `dev-accounts`, past 30 days: YouTube @MrBeast 7 videos with 4,891 to 68,544 comments each (207,152 in all; the plan cost 3 free units); own Instagram 2 posts (7 and 0 comments); own Facebook Page 1 post (2). Reading the own accounts used the posts found by the plan; MrBeast was read one page per video without replies (729 comments stored, 7 units). `prepare.js` took 738 comments for the request.
+- Found: a large account is far beyond what can be labelled in one analysis (207,152 comments would be about 3 million tokens of text before any labels); a default sample for large requests is to be decided.
+
 Still to do: the three-agent tests (Codex, Claude Code, DeepSeek Harness) with the new setup request and a series of ordinary requests.

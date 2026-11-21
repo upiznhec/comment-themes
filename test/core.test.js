@@ -6,7 +6,7 @@ const path = require('node:path');
 const { test } = require('node:test');
 
 const { addRecords, parseCsv, readAll } = require('../scripts/lib/db');
-const { accountOfUrl, normalizeRequest, platformOfUrl } = require('../scripts/lib/sources');
+const { accountOfUrl, normalizeRequest, platformOfUrl, requestPosts, windowOf } = require('../scripts/lib/sources');
 const { contentId, fromRows } = require('../scripts/import');
 
 const tempDir = () => fs.mkdtempSync(path.join(os.tmpdir(), 'comment-themes-'));
@@ -58,9 +58,8 @@ test('platform of a post link', () => {
   assert.equal(platformOfUrl('https://example.com/'), null);
 });
 
-test('request: post links only; fixed routes; own posts take the remembered route; what to ask is named', () => {
+test('request posts: fixed routes; own posts take the remembered route; what to ask is named', () => {
   const { entries, problems } = normalizeRequest({
-    accounts: [{ platform: 'instagram', account: 'rival' }],
     posts: [
       { url: 'https://www.youtube.com/watch?v=abc' },
       { url: 'https://www.instagram.com/p/MINE/', own: true },
@@ -80,13 +79,54 @@ test('request: post links only; fixed routes; own posts take the remembered rout
   ]);
   assert.equal(entries[4].account, 'r/skincare');
   const text = problems.join('\n');
-  assert.equal(problems.length, 6);
-  assert.match(text, /not whole accounts/);
+  assert.equal(problems.length, 5);
   assert.match(text, /listed twice/);
   assert.match(text, /tiktok\.com\/@me\/video\/1: ask how to read the person's own tiktok posts/);
   assert.match(text, /the mcp route reads only the person's own posts/);
   assert.match(text, /ask whether this facebook post is the person's own/);
   assert.match(text, /example\.com\/post: not a YouTube/);
+});
+
+test('request accounts: a time range is needed; Reddit has no accounts; own accounts need a route', () => {
+  const now = Date.parse('2026-11-21T12:00:00Z');
+  const accounts = [
+    { platform: 'youtube', account: '@MrBeast', own: false },
+    { platform: 'instagram', account: 'mybrand', own: true },
+    { platform: 'tiktok', account: '@mybrand', own: true },
+    { platform: 'reddit', account: 'r/skincare' },
+    { platform: 'instagram', account: 'rival' }
+  ];
+  const withTime = normalizeRequest({ time: { days: 30 }, accounts }, { own_routes: { instagram: 'official' } }, now);
+  assert.deepEqual(withTime.accounts.map(a => `${a.platform}:${a.route}:${a.own}:${a.account}`), ['youtube:official:false:@MrBeast', 'instagram:official:true:mybrand']);
+  assert.equal(withTime.window.since, '2026-10-22T12:00:00.000Z');
+  assert.equal(withTime.problems.length, 3);
+  assert.match(withTime.problems.join('\n'), /ask how to read the person's own tiktok posts/);
+  assert.match(withTime.problems.join('\n'), /Reddit is read by post links, not accounts/);
+  assert.match(withTime.problems.join('\n'), /ask whether this instagram account is the person's own/);
+  const noTime = normalizeRequest({ accounts: [accounts[0]] }, {}, now);
+  assert.equal(noTime.accounts.length, 0);
+  assert.match(noTime.problems[0], /from the past how many days, or from which date to which date/);
+});
+
+test('time ranges: past days, or whole days from one date to another', () => {
+  const now = Date.parse('2026-11-21T12:00:00Z');
+  assert.equal(windowOf({ days: 7 }, now).label, 'the past 7 days');
+  const range = windowOf({ from: '2026-10-18', to: '2026-11-04' }, now);
+  assert.equal(new Date(range.since).getDate(), 18);
+  assert.equal(new Date(range.until).getDate(), 4);
+  assert.equal(new Date(range.until).getHours(), 23);
+  assert.equal(windowOf({ from: '18 Oct' }, now), null);
+  assert.equal(windowOf({ from: '2026-11-04', to: '2026-10-18' }, now), null);
+});
+
+test('a request\'s posts are its links plus the posts found for its accounts', () => {
+  const dir = tempDir();
+  fs.mkdirSync(path.join(dir, 'runs', 'r1'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'runs', 'r1', 'request.json'), JSON.stringify({ posts: [{ url: ' https://youtu.be/A ' }] }));
+  assert.deepEqual(requestPosts('r1', dir), { listed: ['https://youtu.be/A'], found: [] });
+  fs.writeFileSync(path.join(dir, 'runs', 'r1', 'posts.json'), JSON.stringify({ accounts: { 'youtube:@b': { posts: [{ url: 'https://www.youtube.com/watch?v=B', comments: 3 }] } } }));
+  assert.deepEqual(requestPosts('r1', dir).found.map(p => p.url), ['https://www.youtube.com/watch?v=B']);
+  assert.equal(requestPosts('r2', dir), null);
 });
 
 test('the account a link names', () => {

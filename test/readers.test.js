@@ -25,7 +25,7 @@ function fake(rules) {
   return asked;
 }
 
-const ctx = (over = {}) => ({ env: { YOUTUBE_API_KEY: 'k', SCRAPECREATORS_API_KEY: 'k', X_BEARER_TOKEN: 't', META_PAGE_TOKEN: 'p', META_PAGE_ID: '99', IG_USER_ID: '77' }, maxPages: 10, cost: newCost(), notes: [], ...over });
+const ctx = (over = {}) => ({ env: { YOUTUBE_API_KEY: 'k', SCRAPECREATORS_API_KEY: 'k', X_BEARER_TOKEN: 't', META_PAGE_TOKEN: 'p', META_PAGE_ID: '99', IG_USER_ID: '77' }, maxPages: 10, listPages: 5, cost: newCost(), notes: [], ...over });
 const ytComment = (text, extra = {}) => ({ textOriginal: text, authorDisplayName: '@sample', authorChannelId: { value: 'UCx' }, likeCount: 1, publishedAt: '2026-11-20T10:00:00Z', ...extra });
 const daysAgo = days => new Date(Date.now() - days * 86400000).toISOString();
 
@@ -185,4 +185,67 @@ test('TikTok connector answers: comments and their replies, hidden ones marked, 
   const link = 'https://www.tiktok.com/@owner/video/v?lang=en';
   assert.equal(fromMcp(answer, link)[0].post_url, link);
   assert.equal(fromMcp(answer, link)[0].account, '@owner');
+});
+
+const window = (sinceDays, untilDays = 0) => ({ since: daysAgo(sinceDays), until: daysAgo(untilDays) });
+
+test('YouTube account: the channel\'s videos inside the time range, with their comment counts; older pages are not read', async () => {
+  const asked = fake([
+    { test: u => u.pathname.endsWith('/channels'), body: u => {
+      assert.equal(u.searchParams.get('forHandle'), '@SampleChannel');
+      return { items: [{ snippet: { title: 'Sample Channel' }, contentDetails: { relatedPlaylists: { uploads: 'UU1' } } }] };
+    } },
+    { test: u => u.pathname.endsWith('/playlistItems') && !u.searchParams.get('pageToken'), body: () => ({ nextPageToken: 'p2', items: [
+      { contentDetails: { videoId: 'new', videoPublishedAt: daysAgo(1) } },
+      { contentDetails: { videoId: 'v1', videoPublishedAt: daysAgo(3) } },
+      { contentDetails: { videoId: 'v2', videoPublishedAt: daysAgo(20) } },
+      { contentDetails: { videoId: 'old', videoPublishedAt: daysAgo(40) } }
+    ] }) },
+    { test: u => u.pathname.endsWith('/videos'), body: () => ({ items: [{ id: 'v1', statistics: { commentCount: '120' } }, { id: 'v2', statistics: {} }] }) }
+  ]);
+  const { account, posts } = await youtube.list({ platform: 'youtube', account: 'https://www.youtube.com/@SampleChannel' }, ctx({ window: window(30, 2) }));
+  assert.equal(account, 'Sample Channel');
+  assert.deepEqual(posts.map(p => [p.id, p.comments, p.url]), [['v1', 120, 'https://www.youtube.com/watch?v=v1'], ['v2', 0, 'https://www.youtube.com/watch?v=v2']]);
+  assert.equal(asked.filter(u => u.pathname.endsWith('/playlistItems')).length, 1);
+});
+
+test('ScrapeCreators Instagram account: only posts inside the time range; a pinned old post does not stop the list', async () => {
+  const asked = fake([{ test: u => u.pathname === '/v2/instagram/user/posts', body: u => (u.searchParams.get('next_max_id')
+    ? { success: true, more_available: true, next_max_id: 'c3', items: [{ id: '4', code: 'OLD', taken_at: Math.floor(Date.parse(daysAgo(50)) / 1000), comment_count: 9 }] }
+    : { success: true, more_available: true, next_max_id: 'c2', items: [
+      { id: '0', code: 'PINNED', taken_at: Math.floor(Date.parse(daysAgo(90)) / 1000), comment_count: 50 },
+      { id: '1', code: 'TODAY', taken_at: Math.floor(Date.parse(daysAgo(0.5)) / 1000), comment_count: 1 },
+      { id: '2', code: 'INSIDE', taken_at: Math.floor(Date.parse(daysAgo(5)) / 1000), comment_count: 2 }
+    ] }) }]);
+  const { posts } = await sc.list({ platform: 'instagram', account: '@shop' }, ctx({ window: window(30, 1) }));
+  assert.deepEqual(posts.map(p => p.url), ['https://www.instagram.com/p/INSIDE/']);
+  assert.equal(asked.length, 2);
+  assert.equal(asked[0].searchParams.get('handle'), 'shop');
+});
+
+test('X account: its own posts from the last 7 days; a range that ended earlier is skipped', async () => {
+  const asked = fake([{ test: u => u.pathname.endsWith('/tweets/search/recent'), body: () => ({ data: [
+    { id: '21', created_at: daysAgo(2), conversation_id: '21', public_metrics: { reply_count: 4 } }
+  ], meta: {} }) }]);
+  const c = ctx({ window: window(30) });
+  const { account, posts } = await x.list({ platform: 'x', account: 'https://x.com/brand' }, c);
+  assert.equal(account, '@brand');
+  assert.deepEqual(posts.map(p => [p.url, p.comments, p.conversation]), [['https://x.com/brand/status/21', 4, '21']]);
+  assert.equal(asked[0].searchParams.get('query'), 'from:brand -is:retweet -is:reply');
+  assert.match(c.notes[0], /only posts from the last 7 days/);
+  assert.equal(c.cost.xPosts, 1);
+  const old = await x.list({ platform: 'x', account: '@brand' }, ctx({ window: window(40, 10) }));
+  assert.match(old.skipped, /more than 7 days ago/);
+});
+
+test('Meta Facebook Page account: the Page\'s posts inside the time range, each with its comment count', async () => {
+  fake([
+    { test: u => u.pathname.endsWith('/99/published_posts'), body: () => ({ data: [
+      { id: '99_3', permalink_url: 'https://www.facebook.com/99/posts/3', created_time: daysAgo(1) },
+      { id: '99_2', permalink_url: 'https://www.facebook.com/99/posts/2', created_time: daysAgo(40) }
+    ] }) },
+    { test: u => u.pathname.endsWith('/99_3/comments'), body: () => ({ summary: { total_count: 5 }, data: [] }) }
+  ]);
+  const { posts } = await meta.list({ platform: 'facebook', account: 'My Page', own: true }, ctx({ window: window(30) }));
+  assert.deepEqual(posts.map(p => [p.id, p.comments]), [['99_3', 5]]);
 });

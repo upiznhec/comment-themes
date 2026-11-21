@@ -21,4 +21,16 @@ function postInfo(platform, id, url, time, comments) {
   return { platform, id: String(id), url, time: toIso(time), comments: comments === undefined ? null : comments };
 }
 
-module.exports = { newCost, postInfo, toIso };
+// True when time (any form toIso reads) falls inside the window { since, until } (ISO strings).
+function inside(time, window) {
+  const t = Date.parse(toIso(time) || '');
+  return !Number.isNaN(t) && t >= Date.parse(window.since) && t <= Date.parse(window.until);
+}
+
+// True when time is before the window starts: lists run newest first, so reading can stop there.
+function before(time, window) {
+  const t = Date.parse(toIso(time) || '');
+  return !Number.isNaN(t) && t < Date.parse(window.since);
+}
+
+module.exports = { before, inside, newCost, postInfo, toIso };
