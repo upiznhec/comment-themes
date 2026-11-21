@@ -17,4 +17,4 @@ Send a request like these whenever you want comments sorted, with your own links
 
 After an analysis, ask your own questions, for example: How many people asked about the price?
 
-The first time a request needs a key, or a choice about how to read your own posts, the agent asks for it.
+The first time a request needs a key, or a choice about how to read your own posts, the agent asks for it. If it can use the browser you are already logged in to, it opens the pages and does the clicks: you only log in, then make and copy the key. On Facebook and Instagram you do every click yourself.

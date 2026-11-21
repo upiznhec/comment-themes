@@ -72,4 +72,8 @@ Checks: `npm test`, 27 tests pass. With the development key, a full-archive sear
 
 The user chose to fix both. The plan now prices an X post by the replies X shows and says that replies to replies are read too at the same price, so it can cost more; a post with more replies than the page limit gets a ceiling instead. A later read now fills in a parent that an earlier read left empty, and never empties one. Checks: `npm test`, 29 tests pass; reading the two posts again on the same UTC day filled in the two missing parents (6 replies answer the post, 5 answer replies).
 
+## 2026-11-21, change: the agent does the clicks up to the key
+
+In the Claude Code test, the agent gave the person every YouTube step: open the API library and enable the API, create and restrict the key, then save it. The user asked for Workflow 2's split, for every platform: the person only signs in, then makes and copies the key (and saves it with the command); the agent does the other clicks in the person's signed-in browser. AGENTS.md rule 3 ("Who does what") and section 4 now say so for ScrapeCreators, YouTube and X, with where the line is on each site; CLAUDE.md points to it. Meta stays the person's (in Workflow 2's tests, Meta logged the user out after an agent clicked on its developer pages), and the TikTok connector is added in the person's own AI app. If the agent cannot use the person's browser, it gives the steps one at a time as before.
+
 Still to do: the three-agent tests (Codex, Claude Code, DeepSeek Harness) with the new setup request and a series of ordinary requests.
