@@ -21,10 +21,4 @@ function postInfo(platform, id, url, time, comments) {
   return { platform, id: String(id), url, time: toIso(time), comments: comments === undefined ? null : comments };
 }
 
-// True when time (any form toIso reads) is on or after since (ISO). Unknown times count as inside.
-function inWindow(time, since) {
-  const iso = toIso(time);
-  return !iso || Date.parse(iso) >= Date.parse(since);
-}
-
-module.exports = { inWindow, newCost, postInfo, toIso };
+module.exports = { newCost, postInfo, toIso };

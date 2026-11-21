@@ -2,7 +2,10 @@
 
 // Chooses the comments for an analysis and writes them as batches for the agent to label.
 // Usage: node scripts/prepare.js --run <name> [--days <n> | --since <date>] [--platform <name>]
-//        [--account <name>] [--own | --others] [--batch <size, default 150>]
+//        [--post <link or part of one>]... [--own | --others] [--batch <size, default 150>]
+// When the run has a request (data/runs/<name>/request.json), only the comments of its posts are taken, and
+// posts with no comments stored yet are named. Without a request, the whole database is taken, narrowed by
+// the options.
 // Writes data/runs/<name>/comments.jsonl and batch-01.jsonl, batch-02.jsonl ... (short ID, text, likes;
 // no names), and prints the buckets to label with.
 const fs = require('fs');
@@ -10,17 +13,25 @@ const path = require('path');
 const { getDataDir } = require('./lib/env-file');
 const { keyOf, readAll } = require('./lib/db');
 const { BUCKETS, runDir } = require('./lib/runs');
+const { requestLinks } = require('./lib/sources');
 
 function option(name) {
   const i = process.argv.indexOf(`--${name}`);
   return i >= 0 ? process.argv[i + 1] : undefined;
 }
 
-function select(records, { since, platform, account, own }) {
+function options(name) {
+  return process.argv.flatMap((item, i) => (item === `--${name}` && process.argv[i + 1] ? [process.argv[i + 1]] : []));
+}
+
+// links: the request's post links (exact); posts: parts of links or post IDs (any one may match).
+function select(records, { since, platform, links, posts = [], own }) {
+  const parts = posts.map(part => String(part).toLowerCase());
   return records.filter(r => {
+    if (links && !links.has(String(r.post_url || '').trim())) return false;
+    if (parts.length && !parts.some(part => String(r.post_url || '').toLowerCase().includes(part) || String(r.post_id || '').toLowerCase().includes(part))) return false;
     if (since && r.time && Date.parse(r.time) < Date.parse(since)) return false;
     if (platform && r.platform !== platform) return false;
-    if (account && String(r.account || '').toLowerCase() !== String(account).toLowerCase()) return false;
     if (own === true && !r.own) return false;
     if (own === false && r.own) return false;
     return String(r.text || '').trim() !== '';
@@ -29,13 +40,20 @@ function select(records, { since, platform, account, own }) {
 
 function main() {
   const name = option('run');
-  if (!name) { console.log('Usage: node scripts/prepare.js --run <name> [--days n | --since date] [--platform p] [--account a] [--own | --others]'); process.exit(2); }
+  if (!name) { console.log('Usage: node scripts/prepare.js --run <name> [--days n | --since date] [--platform p] [--post link]... [--own | --others]'); process.exit(2); }
   const dataDir = getDataDir();
   const days = option('days');
   const since = option('since') ? new Date(option('since')).toISOString() : days ? new Date(Date.now() - Number(days) * 86400000).toISOString() : null;
   const own = process.argv.includes('--own') ? true : process.argv.includes('--others') ? false : null;
-  const chosen = select(readAll(dataDir), { since, platform: option('platform'), account: option('account'), own })
+  const requested = requestLinks(name, dataDir);
+  const links = requested ? new Set(requested) : null;
+  const chosen = select(readAll(dataDir), { since, platform: option('platform'), links, posts: options('post'), own })
     .sort((a, b) => String(a.time || '').localeCompare(String(b.time || '')));
+  if (requested) {
+    const empty = requested.filter(link => !chosen.some(r => String(r.post_url || '').trim() === link));
+    console.log(`Request ${name}: ${requested.length} posts.`);
+    if (empty.length) console.log(`No comments stored for these posts (not read yet, nothing to read, or skipped):\n${empty.map(link => `  ${link}`).join('\n')}`);
+  }
   if (!chosen.length) { console.log('No comments match. Read some with fetch.js or import.js first, or widen the choice.'); process.exit(1); }
   const dir = runDir(name, dataDir);
   if (fs.existsSync(dir) && fs.readdirSync(dir).some(file => file.startsWith('labels'))) {

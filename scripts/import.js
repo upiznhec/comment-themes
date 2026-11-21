@@ -1,22 +1,33 @@
 #!/usr/bin/env node
 
 // Puts comments that did not come from fetch.js into the database:
-//   node scripts/import.js --tiktok-mcp <file.json> --account <handle>   a TikTok Social connector answer
-//   node scripts/import.js --csv <file.csv> [--platform <name>] [--account <name>] [--own]
+//   node scripts/import.js --tiktok-mcp <file.json> --post <link>   a TikTok Social connector answer for that video
+//   node scripts/import.js --csv <file.csv> [--post <link>] [--platform <name>] [--own]
 //        columns: text (or comment), and if there are: author, time (or date), likes, url (or post_url), id
-//   node scripts/import.js --text <file.txt> [--platform ...] [--account ...] [--own]
+//   node scripts/import.js --text <file.txt> [--post <link>] [--platform <name>] [--own]
 //        one comment per line, for comments pasted from an app
+// --post is the post's link as in the request, so that the request's analysis finds these comments; the
+// platform is taken from it unless --platform says otherwise.
 // Rows without an ID get one made from their content, so importing the same file twice adds nothing.
+// A connector answer file is rewritten without its profile picture links, which are never kept.
 const crypto = require('crypto');
 const fs = require('fs');
 const { getDataDir } = require('./lib/env-file');
 const { addRecords, parseCsv } = require('./lib/db');
 const { fromMcp } = require('./platforms/tiktok-mcp');
 const { toIso } = require('./platforms/common');
+const { accountOfUrl, platformOfUrl } = require('./lib/sources');
 
 function option(name) {
   const i = process.argv.indexOf(`--${name}`);
   return i >= 0 ? process.argv[i + 1] : undefined;
+}
+
+// Removes profile picture links from a saved answer, at any depth.
+function withoutPictures(value) {
+  if (Array.isArray(value)) return value.map(withoutPictures);
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(Object.entries(value).filter(([key]) => !/^(profile_image|avatar)/i.test(key)).map(([key, item]) => [key, withoutPictures(item)]));
 }
 
 function contentId(...parts) {
@@ -37,7 +48,7 @@ function fromRows(rows, defaults) {
     const value = index => (index >= 0 ? (cells[index] || '').trim() : '');
     const body = value(text);
     return {
-      ...defaults, post_url: value(url) || null, post_id: value(url) || null,
+      ...defaults, post_url: value(url) || defaults.post_url || null, post_id: value(url) || defaults.post_id || null,
       comment_id: value(id) || contentId(defaults.platform, value(url), value(author), body),
       time: toIso(value(time)), likes: value(likes) === '' ? null : Number(value(likes)), text: body,
       author_name: value(author) || null
@@ -46,20 +57,24 @@ function fromRows(rows, defaults) {
 }
 
 function main() {
+  const post = option('post') ? String(option('post')).trim() : null;
   const defaults = {
-    platform: (option('platform') || 'pasted').toLowerCase(), route: 'import', own: process.argv.includes('--own'),
-    account: option('account') || null
+    platform: (option('platform') || platformOfUrl(post) || 'pasted').toLowerCase(), route: 'import', own: process.argv.includes('--own'),
+    account: accountOfUrl(post), post_url: post, post_id: post
   };
   let records;
   if (option('tiktok-mcp')) {
-    records = fromMcp(JSON.parse(fs.readFileSync(option('tiktok-mcp'), 'utf8')), option('account'));
+    if (!post) throw new Error('Give the video\'s link with --post, as in the request.');
+    const answer = withoutPictures(JSON.parse(fs.readFileSync(option('tiktok-mcp'), 'utf8')));
+    fs.writeFileSync(option('tiktok-mcp'), JSON.stringify(answer, null, 2) + '\n', { mode: 0o600 });
+    records = fromMcp(answer, post);
   } else if (option('csv')) {
     records = fromRows(parseCsv(fs.readFileSync(option('csv'), 'utf8')), defaults);
   } else if (option('text')) {
     records = fs.readFileSync(option('text'), 'utf8').split(/\r?\n/).map(line => line.trim()).filter(Boolean)
-      .map(line => ({ ...defaults, comment_id: contentId(defaults.platform, defaults.account, line), text: line }));
+      .map(line => ({ ...defaults, comment_id: contentId(defaults.platform, post, line), text: line }));
   } else {
-    console.log('Usage: node scripts/import.js --tiktok-mcp <file.json> --account <handle> | --csv <file.csv> | --text <file.txt>');
+    console.log('Usage: node scripts/import.js --tiktok-mcp <file.json> --post <link> | --csv <file.csv> [--post <link>] | --text <file.txt> [--post <link>]');
     process.exit(2);
   }
   const result = addRecords(records, getDataDir());
@@ -70,4 +85,4 @@ if (require.main === module) {
   try { main(); } catch (error) { console.log(`Nothing imported: ${error.message}`); process.exit(1); }
 }
 
-module.exports = { contentId, fromRows };
+module.exports = { contentId, fromRows, withoutPictures };

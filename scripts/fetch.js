@@ -1,16 +1,18 @@
 #!/usr/bin/env node
 
-// Reads the comments listed in data/sources.json into the database (data/comments.jsonl).
+// Reads every comment of the posts in a request (data/runs/<name>/request.json) into the database
+// (data/comments.jsonl).
 // Usage:
-//   node scripts/fetch.js --plan          lists the posts in the window and their comment counts, with what a
-//                                         full read would cost; reads no comments (listing itself costs a little)
-//   node scripts/fetch.js                 reads them all
-//   options: --platform=<name>  --max-pages=<n> (per post, default 30)  --no-replies (YouTube)
-// TikTok entries with "route": "mcp" are read by the agent through the TikTok Social connector; this
+//   node scripts/fetch.js --run <name> --plan   shows, for each post, its comment count where the platform gives
+//                                               one and what reading it costs, and which keys are missing; reads no
+//                                               comments (a YouTube lookup costs 1 free unit, an X lookup US$0.005)
+//   node scripts/fetch.js --run <name>          reads them all
+//   options: --platform <name>  --post <part of a link>  --max-pages <n> (per post, default 30)  --no-replies (YouTube)
+// Own TikTok videos with the route "mcp" are read by the agent through the TikTok Social connector; this
 // script only lists them. Prints counts and costs, never comment text or names.
 const { getDataDir, loadEnvFile } = require('./lib/env-file');
 const { addRecords } = require('./lib/db');
-const { loadSources } = require('./lib/sources');
+const { loadRequest } = require('./lib/sources');
 const { newCost } = require('./platforms/common');
 
 const READERS = {
@@ -30,46 +32,51 @@ const NEEDS = {
 // Rough comments per ScrapeCreators page, for the --plan estimate.
 const PER_PAGE = { instagram: 12, tiktok: 18, facebook: 10, reddit: 15 };
 
+// --name value or --name=value
 function arg(name, fallback) {
-  const found = process.argv.find(item => item.startsWith(`--${name}=`));
-  return found ? found.slice(name.length + 3) : fallback;
+  const i = process.argv.findIndex(item => item === `--${name}` || item.startsWith(`--${name}=`));
+  if (i < 0) return fallback;
+  const item = process.argv[i];
+  return item.includes('=') ? item.slice(item.indexOf('=') + 1) : process.argv[i + 1];
 }
 
-function estimate(entry, posts) {
-  const counted = posts.filter(post => typeof post.comments === 'number');
-  const comments = counted.reduce((sum, post) => sum + post.comments, 0);
-  if (entry.route === 'scrapecreators') {
-    if (counted.length < posts.length) return `not known before reading a post link: 1 ScrapeCreators credit for about every ${PER_PAGE[entry.platform]} comments`;
-    return `about ${counted.reduce((sum, post) => sum + Math.ceil(post.comments / PER_PAGE[entry.platform]), 0)} ScrapeCreators credits`;
-  }
-  if (entry.platform === 'x') return `at most about US$${(comments * 0.015).toFixed(2)} of X credit (${comments} replies at $0.005, plus $0.010 for each different replier)`;
-  if (entry.platform === 'youtube') return `about ${counted.reduce((sum, post) => sum + Math.ceil(post.comments / 100), 0) + 1} YouTube quota units (free)`;
+function estimate(entry, post, maxPages) {
+  const n = post.comments;
+  if (entry.route === 'scrapecreators') return `about 1 ScrapeCreators credit for every ${PER_PAGE[entry.platform]} comments, at most ${maxPages} credit${maxPages === 1 ? '' : 's'} for this post (the count is known only after reading)`;
+  if (entry.platform === 'x') return `at most about US$${(n * 0.015).toFixed(2)} of X credit (${n} replies at $0.005, plus $0.010 for each different replier)`;
+  if (entry.platform === 'youtube') return `about ${Math.ceil(n / 100) + 1} YouTube quota units (free)`;
   return 'free';
 }
 
 async function main() {
+  const name = arg('run');
+  if (!name) { console.log('Usage: node scripts/fetch.js --run <name> [--plan] (the run folder holds the request, see AGENTS.md)'); process.exit(2); }
   const dataDir = getDataDir();
   loadEnvFile(dataDir);
   const plan = process.argv.includes('--plan');
-  const only = arg('platform');
-  const { since, entries, problems } = loadSources(dataDir);
-  problems.forEach(problem => console.log(`Skipped: ${problem}`));
-  const ctx = { since, env: process.env, plan, maxPages: Number(arg('max-pages', 30)), noReplies: process.argv.includes('--no-replies'), cost: newCost(), notes: [] };
-  console.log(`${plan ? 'Plan' : 'Reading'}: posts published since ${since.slice(0, 10)}.`);
+  const onlyPlatform = arg('platform');
+  const onlyPost = String(arg('post', '')).toLowerCase();
+  let request;
+  try { request = loadRequest(name, dataDir); } catch (error) { console.log(error.message); process.exit(1); }
+  request.problems.forEach(problem => console.log(`Not read yet: ${problem}`));
+  const chosen = request.entries.filter(e => (!onlyPlatform || e.platform === onlyPlatform) && (!onlyPost || e.url.toLowerCase().includes(onlyPost)));
+  const ctx = { env: process.env, plan, maxPages: Number(arg('max-pages', 30)), noReplies: process.argv.includes('--no-replies'), cost: newCost(), notes: [] };
+  console.log(`${plan ? 'Plan' : 'Reading'} for ${name}: ${chosen.length} posts; every comment of each is read.`);
   const all = [];
-  for (const entry of entries.filter(e => !only || e.platform === only)) {
-    const label = `${entry.platform} ${entry.kind === 'post' ? entry.url : entry.account} (${entry.own ? 'own' : 'other'}, ${entry.route})`;
+  for (const entry of chosen) {
+    const label = `${entry.platform} (${entry.own === true ? 'own' : entry.own === false ? 'not own' : 'owner not said'}, ${entry.route}) ${entry.url}`;
     if (entry.route === 'mcp') {
-      console.log(`${label}: read by the agent through the TikTok Social connector, then imported with import.js --tiktok-mcp.`);
+      console.log(`${label}: read by the agent through the TikTok Social connector, then imported with import.js --tiktok-mcp <file> --post <this link>.`);
       continue;
     }
-    const missing = (NEEDS[entry.route === 'scrapecreators' ? 'scrapecreators' : entry.platform] || []).filter(name => !process.env[name]);
-    if (missing.length) { console.log(`${label}: skipped, not saved yet: ${missing.join(', ')}`); continue; }
+    const missing = (NEEDS[entry.route === 'scrapecreators' ? 'scrapecreators' : entry.platform] || []).filter(key => !process.env[key]);
+    if (missing.length) { console.log(`${label}: not read, key not saved yet: ${missing.join(', ')}`); continue; }
     try {
-      const { posts, records } = await READERS[`${entry.platform}:${entry.route}`].read(entry, ctx);
-      const withComments = posts.filter(post => post.comments !== 0).length;
-      if (plan) console.log(`${label}: ${posts.length} posts, ${withComments} with comments; comments: ${posts.map(p => p.comments ?? '?').join(', ') || 'none'}; full read: ${estimate(entry, posts)}.`);
-      else console.log(`${label}: ${posts.length} posts, ${records.length} comments read.`);
+      const { posts, records, skipped } = await READERS[`${entry.platform}:${entry.route}`].read(entry, ctx);
+      const post = posts[0];
+      if (skipped) console.log(`${label}: skipped, ${skipped}.`);
+      else if (plan) console.log(`${label}: ${post.comments ?? 'unknown number of'} comments; reading them: ${post.comments === 0 ? 'nothing to read' : estimate(entry, post, ctx.maxPages)}.`);
+      else console.log(`${label}: ${records.length} comments read${typeof post.comments === 'number' ? ` (the post shows ${post.comments})` : ''}.`);
       all.push(...records);
     } catch (error) {
       console.log(`${label}: stopped: ${error.message}`);
@@ -84,7 +91,7 @@ async function main() {
   const costs = [];
   if (c.scrapecreatorsCharged || c.scrapecreatorsLeft !== null) costs.push(`ScrapeCreators ${c.scrapecreatorsCharged} credits used${c.scrapecreatorsLeft !== null ? `, ${c.scrapecreatorsLeft} left` : ''}`);
   if (c.youtubeUnits) costs.push(`YouTube ${c.youtubeUnits} quota units`);
-  if (c.xPosts || c.xUsers) costs.push(`X about US$${(c.xPosts * 0.005 + c.xUsers * 0.01).toFixed(2)} (${c.xPosts} posts, ${c.xUsers} users)`);
+  if (c.xPosts || c.xUsers) costs.push(`X about US$${(c.xPosts * 0.005 + c.xUsers * 0.01).toFixed(3)} (${c.xPosts} posts, ${c.xUsers} users)`);
   console.log(`Cost of this run: ${costs.join('; ') || 'nothing'}.`);
 }
 

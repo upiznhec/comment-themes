@@ -1,11 +1,15 @@
-// The person's list of what to read: data/sources.json (example: sources.example.json). Every platform is
-// optional. Each entry says whether the account or post is the person's own, and for Instagram, Facebook and
-// TikTok how to read it: "official" (Instagram, Facebook), "mcp" (TikTok, through the TikTok Social
-// connector, which the agent calls) or "scrapecreators". YouTube and X are always official, Reddit always
-// ScrapeCreators.
+// What to read for one request: data/runs/<name>/request.json, written by the agent from the person's message.
+// Like ScrapeCreators' comment-mining, the input is post and video links, and every comment of each listed
+// post is read. Each link says whether it is the person's own post ("own": true or false); for Instagram,
+// Facebook and TikTok links that is required, because it decides the route. Own Instagram and Facebook posts
+// are read by "official" or "scrapecreators", own TikTok videos by "mcp" (the TikTok Social connector, which
+// the agent calls) or "scrapecreators": the route comes from the post itself or from the person's remembered
+// choice in data/choices.json. Other people's posts on those three platforms go through ScrapeCreators.
+// YouTube and X are always official, Reddit always ScrapeCreators.
 const fs = require('fs');
 const path = require('path');
 const { getDataDir } = require('./env-file');
+const { runDir } = require('./runs');
 
 const PLATFORMS = ['youtube', 'instagram', 'facebook', 'tiktok', 'x', 'reddit'];
 const FIXED_ROUTE = { youtube: 'official', x: 'official', reddit: 'scrapecreators' };
@@ -26,46 +30,75 @@ function platformOfUrl(url) {
   return null;
 }
 
-// Returns { since, entries, problems }. since is an ISO time: "since" in the file, or now minus "days".
-function normalizeSources(raw, now = Date.now()) {
+// The account a link belongs to, when the link says it (TikTok, X, Reddit); null otherwise.
+function accountOfUrl(url) {
+  const match = String(url || '').match(/tiktok\.com\/(@[\w.-]+)|(?:x|twitter)\.com\/(\w+)\/status|reddit\.com\/(r\/\w+)/i);
+  if (!match) return null;
+  return match[1] || (match[2] ? `@${match[2]}` : match[3]);
+}
+
+// raw: the request; choices: data/choices.json ({ "own_routes": { "instagram": "official", ... } }).
+// Returns { entries, problems }; a post with a problem is left out, and the problem says what to ask.
+function normalizeRequest(raw, choices = {}) {
   const problems = [];
-  const days = Number(raw.days || 7);
-  const since = raw.since ? new Date(raw.since).toISOString() : new Date(now - days * 86400000).toISOString();
   const entries = [];
-  const add = (item, kind) => {
-    const platform = String(item.platform || (kind === 'post' ? platformOfUrl(item.url) : '') || '').toLowerCase();
-    const label = kind === 'post' ? item.url : item.account;
-    if (!PLATFORMS.includes(platform)) { problems.push(`${label}: unknown platform`); return; }
-    if (kind === 'account' && !item.account) { problems.push(`${platform} account without a name`); return; }
-    if (kind === 'post' && !item.url) { problems.push(`${platform} post without a link`); return; }
-    if (kind === 'account' && platform === 'reddit') { problems.push(`${label}: Reddit is read by post links, not accounts`); return; }
-    const own = item.own === true;
-    let route = FIXED_ROUTE[platform] || item.route;
-    if (!route) route = own ? null : 'scrapecreators';
-    if (!route) { problems.push(`${label}: choose how to read your own ${platform} (${ROUTES[platform].join(' or ')})`); return; }
-    if (ROUTES[platform] && !ROUTES[platform].includes(route)) { problems.push(`${label}: ${platform} can be read by ${ROUTES[platform].join(' or ')}, not "${route}"`); return; }
-    if ((route === 'official' && ['instagram', 'facebook'].includes(platform) || route === 'mcp') && !own) {
-      problems.push(`${label}: the official ${platform} route reads only your own account`);
-      return;
-    }
-    entries.push({ kind, platform, route, own, account: item.account || null, url: item.url || null });
-  };
-  (raw.accounts || []).forEach(item => add(item, 'account'));
-  (raw.posts || []).forEach(item => add(item, 'post'));
-  return { since, entries, problems };
-}
-
-function sourcesPath(dataDir = getDataDir()) {
-  return path.join(dataDir, 'sources.json');
-}
-
-function loadSources(dataDir = getDataDir()) {
-  const file = sourcesPath(dataDir);
-  let raw;
-  try { raw = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (error) {
-    throw new Error(`${file} is missing or is not valid JSON. Copy sources.example.json there and fill it in.`);
+  const seen = new Set();
+  if (Array.isArray(raw.accounts) && raw.accounts.length) {
+    problems.push('This workflow reads post links, not whole accounts: list the posts under "posts" instead');
   }
-  return normalizeSources(raw);
+  for (const item of raw.posts || []) {
+    const url = String(item.url || '').trim();
+    const platform = platformOfUrl(url);
+    if (!url) { problems.push('a post without a link'); continue; }
+    if (seen.has(url)) { problems.push(`${url}: listed twice`); continue; }
+    seen.add(url);
+    if (!platform) { problems.push(`${url}: not a YouTube, Instagram, Facebook, TikTok, X or Reddit link`); continue; }
+    const own = item.own === true ? true : item.own === false ? false : null;
+    let route = FIXED_ROUTE[platform];
+    if (!route) {
+      if (own === null) { problems.push(`${url}: ask whether this ${platform} post is the person's own (it decides how it is read)`); continue; }
+      route = item.route || (own ? choices.own_routes?.[platform] : 'scrapecreators') || null;
+      if (!route) { problems.push(`${url}: ask how to read the person's own ${platform} posts (${ROUTES[platform].join(' or ')}) and save the answer in data/choices.json`); continue; }
+      if (!ROUTES[platform].includes(route)) { problems.push(`${url}: ${platform} can be read by ${ROUTES[platform].join(' or ')}, not "${route}"`); continue; }
+      if (!own && route !== 'scrapecreators') { problems.push(`${url}: the ${route} route reads only the person's own posts`); continue; }
+    }
+    entries.push({ platform, route, own, url, account: item.account || accountOfUrl(url) });
+  }
+  return { entries, problems };
 }
 
-module.exports = { PLATFORMS, ROUTES, loadSources, normalizeSources, platformOfUrl, sourcesPath };
+function requestPath(name, dataDir = getDataDir()) {
+  return path.join(runDir(name, dataDir), 'request.json');
+}
+
+function choicesPath(dataDir = getDataDir()) {
+  return path.join(dataDir, 'choices.json');
+}
+
+function readJson(file, what) {
+  try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch (error) {
+    if (error.code === 'ENOENT') return null;
+    throw new Error(`${file} is not valid JSON (${what})`);
+  }
+}
+
+function loadChoices(dataDir = getDataDir()) {
+  return readJson(choicesPath(dataDir), 'the remembered choices') || {};
+}
+
+// The links of a request as written, or null when the run has no request.json.
+function requestLinks(name, dataDir = getDataDir()) {
+  const raw = readJson(requestPath(name, dataDir), 'the request');
+  return raw ? (raw.posts || []).map(item => String(item.url || '').trim()).filter(Boolean) : null;
+}
+
+function loadRequest(name, dataDir = getDataDir()) {
+  const raw = readJson(requestPath(name, dataDir), 'the request');
+  if (!raw) throw new Error(`${requestPath(name, dataDir)} is missing. Write the request's post links there first (see AGENTS.md).`);
+  return normalizeRequest(raw, loadChoices(dataDir));
+}
+
+module.exports = {
+  PLATFORMS, ROUTES, accountOfUrl, choicesPath, loadChoices, loadRequest, normalizeRequest, platformOfUrl,
+  requestLinks, requestPath
+};

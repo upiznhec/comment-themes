@@ -5,6 +5,7 @@ const { test } = require('node:test');
 const { check, summarize } = require('../scripts/tally');
 const { findQuote, quotesIn } = require('../scripts/check-quotes');
 const { matches } = require('../scripts/find');
+const { select } = require('../scripts/prepare');
 
 const comments = [
   { id: 'C0001', key: 'yt:1', platform: 'youtube', likes: 10, text: 'Does this leave a white cast on dark skin?' },
@@ -51,8 +52,23 @@ test('quotes: found in any case and spacing, with ... for left-out words; made-u
   assert.deepEqual(quotes.map(q => findQuote(q, comments)), [['C0001'], ['C0002'], []]);
 });
 
-test('search: every word must appear; filters by platform', () => {
-  const filter = { words: ['white', 'cast'], regex: null, platform: 'youtube', account: null, own: null, since: null };
+test('search: every word must appear; filters by platform and by part of a post link', () => {
+  const filter = { words: ['white', 'cast'], regex: null, platform: 'youtube', post: null, own: null, since: null };
   assert.equal(comments.filter(c => matches(c, filter)).length, 2);
   assert.equal(comments.filter(c => matches(c, { ...filter, platform: 'instagram' })).length, 0);
+  const linked = [{ ...comments[0], post_url: 'https://youtu.be/AbC123' }, { ...comments[1], post_url: 'https://youtu.be/Other' }];
+  assert.equal(linked.filter(c => matches(c, { ...filter, post: 'abc123' })).length, 1);
+});
+
+test('choosing comments: a request takes only its own posts; parts of links narrow a choice without one', () => {
+  const stored = [
+    { platform: 'youtube', post_url: 'https://youtu.be/A', post_id: 'A', text: 'one', own: false },
+    { platform: 'tiktok', post_url: 'https://www.tiktok.com/@me/video/7', post_id: '7', text: 'two', own: true },
+    { platform: 'tiktok', post_url: 'https://www.tiktok.com/@me/video/8', post_id: '8', text: 'three', own: true },
+    { platform: 'tiktok', post_url: 'https://www.tiktok.com/@me/video/7', post_id: '7', text: '   ', own: true }
+  ];
+  const links = new Set(['https://youtu.be/A', 'https://www.tiktok.com/@me/video/7']);
+  assert.deepEqual(select(stored, { links }).map(r => r.text), ['one', 'two']);
+  assert.deepEqual(select(stored, { posts: ['video/8'] }).map(r => r.text), ['three']);
+  assert.deepEqual(select(stored, { own: true }).map(r => r.text), ['two', 'three']);
 });

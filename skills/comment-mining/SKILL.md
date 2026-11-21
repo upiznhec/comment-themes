@@ -29,11 +29,11 @@ Use this skill when the person asks to:
 
 ## Where the comments come from
 
-From `data/comments.jsonl`, filled by `scripts/fetch.js` (YouTube, Instagram, Facebook, X, Reddit, TikTok through ScrapeCreators) and `scripts/import.js` (TikTok through the TikTok Social connector, pasted comments, CSV files). AGENTS.md says how each source is set up. Do not read comments any other way.
+From `data/comments.jsonl`, filled for each request (the post links in `data/runs/<name>/request.json`) by `scripts/fetch.js` (YouTube, Instagram, Facebook, X, Reddit, TikTok through ScrapeCreators) and `scripts/import.js` (TikTok through the TikTok Social connector, pasted comments, CSV files). AGENTS.md says how each source is set up. Do not read comments any other way.
 
 ## Workflow
 
-1. **Choose the comments**: `node scripts/prepare.js --run <name>` with the person's window and filters. It writes batches of short IDs, text and likes, without names.
+1. **Choose the comments**: `node scripts/prepare.js --run <name>`. For a request it takes the comments of the request's posts; without one, the whole database and the person's filters. It writes batches of short IDs, text and likes, without names.
 
 2. **Clean lightly** (while labelling)
    - Label obvious spam, emoji-only comments, tagged friends and off-topic comments `not_useful`.

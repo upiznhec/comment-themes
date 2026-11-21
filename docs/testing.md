@@ -16,4 +16,16 @@ Scripts, live run on the author's accounts plus one public YouTube video and one
 - Run `test-own` (13 own comments): labelled by hand, `tally.js` counted 11 useful and 2 not useful; `check-quotes.js` found 4 real quotes (including a curly apostrophe) and caught 1 made-up quote; `find.js --run test-own --bucket questions` listed 3.
 - `npm test`: 19 tests pass.
 
-Still to do: the three-agent tests (Codex, Claude Code, DeepSeek Harness) from the setup request.
+## 2026-11-21, change: post links, one request at a time
+
+Why: the first design asked everything at setup (platforms, own and other accounts, a time window, a route for each own platform, every key), so the setup request and the test had to cover every combination. Comment sorting is done when the person wants it, not on a schedule, and ScrapeCreators' comment-mining takes post links in each request ("Use the post/video URL whenever possible"). Now setup only installs the repository; each request lists post links in `data/runs/<name>/request.json`, and a choice or key is asked for the first time a request needs it. Choices are remembered in `data/choices.json`. There are no accounts and no time window.
+
+Checks:
+- `npm test`: 24 tests pass (request rules, post-link readers for every route, choosing a request's comments).
+- Live run `dev-links` (8 links), `fetch.js --plan --max-pages 1`: Instagram official 7 comments, Facebook Page post 2, YouTube 144, ScrapeCreators posts shown with a ceiling of 1 credit each; the TikTok link without "own" was held back with the question to ask; a made-up Page share link (pfbid) stopped with the Page's latest posts listed.
+- `fetch.js --max-pages 1`: Instagram 7 of 7, Facebook Page 2 of 2 (1 without a name), Facebook profile post through ScrapeCreators 4, YouTube 144 of 144, Reddit 25 (one page); 2 ScrapeCreators credits, 4 YouTube units.
+- TikTok connector: `account_user_comment_list_get` on the own video gave 4 comments; `import.js --tiktok-mcp --post <link>` stored them under the link and removed the profile picture links from the saved answer.
+- `prepare.js --run dev-links` took the request's comments and named the two links with none; `find.js --post <video ID>` found the 4 TikTok comments.
+- Found: Meta's API gives Page posts numeric links (`/posts/<number>`), while a link copied in the browser can be a share link (`pfbid...`), which cannot be matched; the agent then asks which of the listed latest posts it is.
+
+Still to do: the three-agent tests (Codex, Claude Code, DeepSeek Harness) with the new setup request and a series of ordinary requests.

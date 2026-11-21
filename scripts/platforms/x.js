@@ -1,6 +1,6 @@
-// X through the official API with an app Bearer Token (X_BEARER_TOKEN). Paid per item read: $0.005 a post
-// (replies included) and $0.010 a user, from the person's credit at console.x.com. Search covers only the
-// last 7 days, so older posts are not read.
+// X through the official API with an app Bearer Token (X_BEARER_TOKEN). Paid per item read from the person's
+// credit at console.x.com: $0.005 a post (the post itself and each reply) and $0.010 a user. Replies are found
+// by search, which covers only the last 7 days, so a post older than that is skipped.
 const { getJson } = require('../lib/http');
 const { postInfo, toIso } = require('./common');
 
@@ -20,18 +20,21 @@ function tweetIdFromUrl(url) {
   return match ? match[1] : null;
 }
 
-// Search starts no earlier than 7 days ago (X refuses older start times).
-function searchStart(since, now = Date.now()) {
-  const floor = new Date(now - SEVEN_DAYS + 60000).toISOString();
-  return Date.parse(since) > Date.parse(floor) ? since : floor;
+// Search may start no earlier than 7 days ago; one minute is kept as a margin.
+function searchStart(now = Date.now()) {
+  return new Date(now - SEVEN_DAYS + 60000).toISOString();
 }
 
-async function search(query, extra, ctx) {
+async function readConversation(post, conversationId, entry, ctx) {
   const items = [];
   const users = new Map();
   let nextToken = '';
   for (let page = 0; page < ctx.maxPages; page += 1) {
-    const params = { query, max_results: '100', start_time: searchStart(ctx.since), ...extra };
+    const params = {
+      query: `conversation_id:${conversationId} is:reply`, max_results: '100', start_time: searchStart(),
+      'tweet.fields': 'author_id,created_at,public_metrics,in_reply_to_user_id,referenced_tweets,conversation_id',
+      expansions: 'author_id', 'user.fields': 'username,name'
+    };
     if (nextToken) params.next_token = nextToken;
     const body = await xget('tweets/search/recent', params, ctx);
     items.push(...(body.data || []));
@@ -41,14 +44,6 @@ async function search(query, extra, ctx) {
     nextToken = body.meta?.next_token;
     if (!nextToken) break;
   }
-  return { items, users };
-}
-
-async function readConversation(post, entry, ctx) {
-  const { items, users } = await search(`conversation_id:${post.id} is:reply`, {
-    'tweet.fields': 'author_id,created_at,public_metrics,in_reply_to_user_id,referenced_tweets,conversation_id',
-    expansions: 'author_id', 'user.fields': 'username,name'
-  }, ctx);
   return items.map(tweet => {
     const user = users.get(tweet.author_id) || {};
     const repliedTo = (tweet.referenced_tweets || []).find(ref => ref.type === 'replied_to')?.id || null;
@@ -63,25 +58,19 @@ async function readConversation(post, entry, ctx) {
   });
 }
 
+// Looks the post up first ($0.005), also in --plan, for its reply count and age.
 async function read(entry, ctx) {
-  if (Date.parse(ctx.since) < Date.now() - SEVEN_DAYS) ctx.notes.push('X: only the last 7 days can be searched; older posts were skipped');
-  let posts;
-  if (entry.kind === 'post') {
-    const id = tweetIdFromUrl(entry.url);
-    if (!id) throw new Error(`X: no post ID in ${entry.url}`);
-    posts = [postInfo('x', id, entry.url, null, undefined)];
-  } else {
-    const handle = String(entry.account).replace(/^@/, '');
-    const { items } = await search(`from:${handle} -is:retweet -is:reply`, { 'tweet.fields': 'created_at,public_metrics,conversation_id' }, ctx);
-    posts = items.map(t => postInfo('x', t.id, `https://x.com/${handle}/status/${t.id}`, t.created_at, t.public_metrics?.reply_count ?? null));
+  const id = tweetIdFromUrl(entry.url);
+  if (!id) throw new Error(`X: no post ID in ${entry.url}`);
+  const tweet = (await xget(`tweets/${id}`, { 'tweet.fields': 'created_at,public_metrics,conversation_id' }, ctx)).data;
+  ctx.cost.xPosts += 1;
+  if (!tweet) throw new Error(`X: post ${id} not found (deleted or protected?)`);
+  const post = postInfo('x', id, entry.url, tweet.created_at, tweet.public_metrics?.reply_count ?? null);
+  if (Date.parse(tweet.created_at) < Date.now() - SEVEN_DAYS) {
+    return { posts: [post], records: [], skipped: 'posted more than 7 days ago, and X search reaches only the last 7 days' };
   }
-  if (ctx.plan) return { posts, records: [] };
-  const records = [];
-  for (const post of posts) {
-    if (post.comments === 0) continue;
-    records.push(...await readConversation(post, entry, ctx));
-  }
-  return { posts, records };
+  if (ctx.plan || post.comments === 0) return { posts: [post], records: [] };
+  return { posts: [post], records: await readConversation(post, tweet.conversation_id || id, entry, ctx) };
 }
 
 module.exports = { read, searchStart, tweetIdFromUrl };

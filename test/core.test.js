@@ -6,7 +6,7 @@ const path = require('node:path');
 const { test } = require('node:test');
 
 const { addRecords, parseCsv, readAll } = require('../scripts/lib/db');
-const { normalizeSources, platformOfUrl } = require('../scripts/lib/sources');
+const { accountOfUrl, normalizeRequest, platformOfUrl } = require('../scripts/lib/sources');
 const { contentId, fromRows } = require('../scripts/import');
 
 const tempDir = () => fs.mkdtempSync(path.join(os.tmpdir(), 'comment-themes-'));
@@ -58,26 +58,39 @@ test('platform of a post link', () => {
   assert.equal(platformOfUrl('https://example.com/'), null);
 });
 
-test('source list: fixed routes, own-only routes and the window', () => {
-  const now = Date.parse('2026-11-21T00:00:00Z');
-  const { since, entries, problems } = normalizeSources({
-    days: 7,
-    accounts: [
-      { platform: 'youtube', account: '@brand' },
-      { platform: 'instagram', account: 'mine', own: true, route: 'official' },
-      { platform: 'instagram', account: 'rival', route: 'official' },
-      { platform: 'tiktok', account: 'mine', own: true },
-      { platform: 'reddit', account: 'someone' },
-      { platform: 'facebook', account: 'https://facebook.com/rival' }
-    ],
-    posts: [{ url: 'https://www.reddit.com/r/skincare/comments/1/x/' }]
-  }, now);
-  assert.equal(since, '2026-11-14T00:00:00.000Z');
+test('request: post links only; fixed routes; own posts take the remembered route; what to ask is named', () => {
+  const { entries, problems } = normalizeRequest({
+    accounts: [{ platform: 'instagram', account: 'rival' }],
+    posts: [
+      { url: 'https://www.youtube.com/watch?v=abc' },
+      { url: 'https://www.instagram.com/p/MINE/', own: true },
+      { url: 'https://www.instagram.com/p/OTHER/', own: false },
+      { url: 'https://www.instagram.com/p/OTHER/', own: false },
+      { url: 'https://www.facebook.com/61500000000000/posts/pfbid0abc', own: true, route: 'scrapecreators' },
+      { url: 'https://www.tiktok.com/@me/video/1', own: true },
+      { url: 'https://www.tiktok.com/@rival/video/2', own: false, route: 'mcp' },
+      { url: 'https://www.facebook.com/somepage/posts/3' },
+      { url: 'https://www.reddit.com/r/skincare/comments/4/y/' },
+      { url: 'https://example.com/post' }
+    ]
+  }, { own_routes: { instagram: 'official' } });
   assert.deepEqual(entries.map(e => `${e.platform}:${e.route}:${e.own}`), [
-    'youtube:official:false', 'instagram:official:true', 'facebook:scrapecreators:false', 'reddit:scrapecreators:false'
+    'youtube:official:null', 'instagram:official:true', 'instagram:scrapecreators:false',
+    'facebook:scrapecreators:true', 'reddit:scrapecreators:null'
   ]);
-  assert.equal(problems.length, 3);
-  assert.match(problems.join('\n'), /reads only your own account/);
-  assert.match(problems.join('\n'), /choose how to read your own tiktok/);
-  assert.match(problems.join('\n'), /Reddit is read by post links/);
+  assert.equal(entries[4].account, 'r/skincare');
+  const text = problems.join('\n');
+  assert.equal(problems.length, 6);
+  assert.match(text, /not whole accounts/);
+  assert.match(text, /listed twice/);
+  assert.match(text, /tiktok\.com\/@me\/video\/1: ask how to read the person's own tiktok posts/);
+  assert.match(text, /the mcp route reads only the person's own posts/);
+  assert.match(text, /ask whether this facebook post is the person's own/);
+  assert.match(text, /example\.com\/post: not a YouTube/);
+});
+
+test('the account a link names', () => {
+  assert.equal(accountOfUrl('https://www.tiktok.com/@brand.shop/video/1'), '@brand.shop');
+  assert.equal(accountOfUrl('https://x.com/brand/status/1'), '@brand');
+  assert.equal(accountOfUrl('https://www.instagram.com/p/CODE/'), null);
 });

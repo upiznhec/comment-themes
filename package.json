@@ -1,7 +1,7 @@
 {
   "name": "comment-themes",
   "version": "0.1.0",
-  "description": "Sort a list of social media posts' comments into themes with an AI agent, with counts and quotes checked by scripts.",
+  "description": "Sort the comments on social media posts into themes with an AI agent, with counts and quotes checked by scripts.",
   "private": true,
   "license": "MIT",
   "engines": { "node": ">=20" },

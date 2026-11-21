@@ -2,7 +2,7 @@
 
 // Answers the person's own questions about the comments with exact counts and comment IDs, so that the
 // agent does not have to read every comment or guess a number.
-// Usage: node scripts/find.js [--text "words"] [--regex <pattern>] [--platform p] [--account a]
+// Usage: node scripts/find.js [--text "words"] [--regex <pattern>] [--platform p] [--post <part of a link>]
 //        [--own | --others] [--days n | --since date] [--run <name> [--bucket b] [--theme t]]
 //        [--count] [--limit n, default 20] [--names]
 // --text: every word must appear (any case). --run with --bucket or --theme searches that run's labels.
@@ -16,12 +16,12 @@ function option(name) {
   return i >= 0 ? process.argv[i + 1] : undefined;
 }
 
-function matches(record, { words, regex, platform, account, own, since }) {
+function matches(record, { words, regex, platform, post, own, since }) {
   const text = String(record.text || '');
   if (words.length && !words.every(word => text.toLowerCase().includes(word))) return false;
   if (regex && !regex.test(text)) return false;
   if (platform && record.platform !== platform) return false;
-  if (account && String(record.account || '').toLowerCase() !== account.toLowerCase()) return false;
+  if (post && ![record.post_url, record.post_id].some(value => String(value || '').toLowerCase().includes(post.toLowerCase()))) return false;
   if (own === true && !record.own) return false;
   if (own === false && record.own) return false;
   if (since && record.time && Date.parse(record.time) < Date.parse(since)) return false;
@@ -34,7 +34,7 @@ function main() {
   const filter = {
     words: String(option('text') || '').toLowerCase().split(/\s+/).filter(Boolean),
     regex: option('regex') ? new RegExp(option('regex'), 'i') : null,
-    platform: option('platform'), account: option('account'),
+    platform: option('platform'), post: option('post'),
     own: process.argv.includes('--own') ? true : process.argv.includes('--others') ? false : null,
     since: option('since') ? new Date(option('since')).toISOString() : days ? new Date(Date.now() - Number(days) * 86400000).toISOString() : null
   };
