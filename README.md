@@ -15,4 +15,4 @@ Needs Node.js 20 or newer. Tests: `npm test`.
 
 ## Credits
 
-The analysis method is adapted from [comment-mining](https://github.com/ScrapeCreators/social-media-research-skills) by ScrapeCreators (MIT). See [LICENSE](LICENSE).
+The analysis method is adapted from [comment-mining](https://github.com/ScrapeCreators/social-media-research-skills) by ScrapeCreators (MIT); its license is in [skills/comment-mining/LICENSE](skills/comment-mining/LICENSE), and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) says what was kept and what was changed. This project is not affiliated with or endorsed by ScrapeCreators. Everything else is under the [MIT License](LICENSE).

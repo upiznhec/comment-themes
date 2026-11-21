@@ -5,7 +5,8 @@ license: MIT
 ---
 
 <!-- Adapted from comment-mining (version 1.0.0) in https://github.com/ScrapeCreators/social-media-research-skills,
-Copyright (c) 2026 ScrapeCreators, MIT License. Changes: comments come from this repository's database
+Copyright (c) 2026 ScrapeCreators, MIT License (full text in LICENSE in this folder; details in THIRD_PARTY_NOTICES.md).
+Not affiliated with or endorsed by ScrapeCreators. Changes: comments come from this repository's database
 (official APIs, the TikTok Social connector, ScrapeCreators or an import) instead of ScrapeCreators calls only;
 a not_useful bucket stands for the cleaning step; scripts do the counting and check the quotes. The buckets, the
 themes, the report format, the guardrails and the pitfalls are the original's. -->

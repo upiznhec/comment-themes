@@ -1,11 +1,6 @@
 MIT License
 
 Copyright (c) 2026 Nanpu Chen
-skills/comment-mining/SKILL.md is adapted from comment-mining in
-https://github.com/ScrapeCreators/social-media-research-skills
-Copyright (c) 2026 ScrapeCreators, also under the MIT License.
-scripts/lib/prompt.js and scripts/lib/env-file.js are taken from the Workflow 2 repository
-https://github.com/upiznhec/Sibyl-System-Hotspot-Monitor (MIT).
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -24,3 +19,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+Third-party material is listed in THIRD_PARTY_NOTICES.md and keeps its own license:
+skills/comment-mining/SKILL.md is adapted from ScrapeCreators' work, whose license is
+in skills/comment-mining/LICENSE.
