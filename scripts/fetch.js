@@ -13,7 +13,7 @@
 // Own TikTok videos with the route "mcp" are read by the agent through the TikTok Social connector; this
 // script only lists them. Prints counts and costs, never comment text or names.
 const { getDataDir, loadEnvFile } = require('./lib/env-file');
-const { addRecords } = require('./lib/db');
+const { addRecords, withoutText } = require('./lib/db');
 const { loadRequest } = require('./lib/sources');
 const { newCost } = require('./platforms/common');
 
@@ -43,6 +43,13 @@ function arg(name, fallback) {
 }
 
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+// The line for one post after reading it. Comments without any text are not stored, so it says how many.
+function readSummary(records, post) {
+  const blank = withoutText(records);
+  return `${plural(records.length, 'comment')} read${typeof post.comments === 'number' ? ` (the post shows ${post.comments})` : ''}`
+    + (blank ? `; ${blank} of them ${blank === 1 ? 'has' : 'have'} no text and ${blank === 1 ? 'is' : 'are'} not stored` : '');
+}
 
 // What reading one post's comments costs, from its comment count and the page limit.
 function estimate(entry, post, maxPages) {
@@ -90,7 +97,7 @@ async function main() {
       const { posts: [post], records, skipped } = await READERS[`${entry.platform}:${entry.route}`].read(entry, ctx);
       if (skipped) console.log(`${label}: skipped, ${skipped}.`);
       else if (plan) console.log(`${label}: ${post.comments ?? 'unknown number of'} comments; reading them: ${post.comments === 0 ? 'nothing to read' : estimate(entry, post, ctx.maxPages)}.`);
-      else console.log(`${label}: ${records.length} comments read${typeof post.comments === 'number' ? ` (the post shows ${post.comments})` : ''}.`);
+      else console.log(`${label}: ${readSummary(records, post)}.`);
       all.push(...records);
     } catch (error) {
       console.log(`${label}: stopped: ${error.message}`);
@@ -111,4 +118,4 @@ async function main() {
 
 if (require.main === module) main();
 
-module.exports = { estimate };
+module.exports = { estimate, readSummary };

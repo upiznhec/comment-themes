@@ -8,7 +8,7 @@ const x = require('../scripts/platforms/x');
 const meta = require('../scripts/platforms/meta');
 const { fromMcp } = require('../scripts/platforms/tiktok-mcp');
 const { newCost } = require('../scripts/platforms/common');
-const { estimate } = require('../scripts/fetch');
+const { estimate, readSummary } = require('../scripts/fetch');
 
 const realFetch = global.fetch;
 afterEach(() => { global.fetch = realFetch; });
@@ -235,4 +235,11 @@ test('a post with more comments than the page limit is read top comments first',
   ]);
   await x.read({ platform: 'x', url: 'https://x.com/a/status/20' }, ctx({ maxPages: 10 }));
   assert.equal(searched.find(u => u.pathname.endsWith('/search/recent')).searchParams.get('sort_order'), 'relevancy');
+});
+
+test('the line after reading a post says how many comments had no text, since those are not stored', () => {
+  assert.equal(readSummary([{ text: 'Wow' }, { text: '' }, { text: 'Glad to see it' }, { text: ' ' }], { comments: 4 }),
+    '4 comments read (the post shows 4); 2 of them have no text and are not stored');
+  assert.equal(readSummary([{ text: 'ok' }, { text: '' }], {}), '2 comments read; 1 of them has no text and is not stored');
+  assert.equal(readSummary([{ text: 'ok' }], { comments: 1 }), '1 comment read (the post shows 1)');
 });

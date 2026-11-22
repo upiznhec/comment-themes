@@ -38,6 +38,12 @@ function clean(record, now) {
   return out;
 }
 
+// How many of these comments have no text at all. addRecords leaves them out, so the scripts say how many
+// there were; otherwise a post's count and the database's look as if a comment went missing.
+function withoutText(records) {
+  return records.filter(record => record && !String(record.text || '').trim()).length;
+}
+
 // Adds new comments and updates known ones; returns how many of each. Writes the file in one step.
 function addRecords(records, dataDir = getDataDir(), now = new Date().toISOString()) {
   const existing = new Map(readAll(dataDir).map(record => [keyOf(record), record]));
@@ -97,4 +103,4 @@ function parseCsv(text) {
   return rows.filter(cells => cells.some(value => value.trim() !== ''));
 }
 
-module.exports = { FIELDS, addRecords, clean, dbPath, keyOf, parseCsv, readAll, toCsv };
+module.exports = { FIELDS, addRecords, clean, dbPath, keyOf, parseCsv, readAll, toCsv, withoutText };

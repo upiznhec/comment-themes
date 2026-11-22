@@ -102,7 +102,7 @@ async function findFacebookPost(entry, ctx) {
   const match = recent.find(has);
   if (match) return match;
   const list = recent.slice(0, 10).map(p => `  ${String(p.created_time).slice(0, 10)}  ${(p.message || '(no text)').replace(/\s+/g, ' ').slice(0, 50)}  ${p.permalink_url}`).join('\n');
-  throw new Error(`Facebook: ${entry.url} could not be matched to a post of your Page. If it is on a personal profile, read it with ScrapeCreators. Otherwise ask which of the Page's latest posts it is and put that link in request.json instead:\n${list}`);
+  throw new Error(`Facebook: ${entry.url} was not found among the posts of the Page this token reads. A post on a personal profile (also one in professional mode) or on another Page cannot be read with this token: first ask the person what the post is on (AGENTS.md, section 4, Meta, step 1), and do not offer this Page's posts in its place. If it is on this Page, ask which of its latest posts it is and put that link in request.json instead:\n${list}`);
 }
 
 async function readFacebook(entry, ctx) {

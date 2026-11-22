@@ -13,7 +13,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const { getDataDir } = require('./lib/env-file');
-const { addRecords, parseCsv } = require('./lib/db');
+const { addRecords, parseCsv, withoutText } = require('./lib/db');
 const { fromMcp } = require('./platforms/tiktok-mcp');
 const { toIso } = require('./platforms/common');
 const { accountOfUrl, platformOfUrl } = require('./lib/sources');
@@ -78,7 +78,9 @@ function main() {
     process.exit(2);
   }
   const result = addRecords(records, getDataDir());
-  console.log(`Imported ${records.length} comments: ${result.added} new, ${result.updated} already there. ${result.total} comments in all.`);
+  const blank = withoutText(records);
+  console.log(`Imported ${records.length} comments: ${result.added} new, ${result.updated} already there. ${result.total} comments in all.`
+    + (blank ? ` ${blank} of them ${blank === 1 ? 'has' : 'have'} no text and ${blank === 1 ? 'was' : 'were'} not stored.` : ''));
 }
 
 if (require.main === module) {
