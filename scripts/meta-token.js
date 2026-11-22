@@ -24,11 +24,19 @@ const NEEDED = {
   instagram_basic: 'to see your Instagram posts',
   instagram_manage_comments: 'to read comments on your Instagram posts'
 };
+// The app ID is typed here, not in the chat (in the DeepSeek test the agent asked for it in the chat; the
+// person did not want to give it there). Once it is typed, the script shows the link to the app secret,
+// which a person could not find from the app's menu in the Claude test.
 const QUESTIONS = {
-  appId: '1 of 3. App ID (App settings, Basic, in your Meta app): ',
-  appSecret: '2 of 3. App secret (same page, Show). It is not shown on screen.',
+  appId: '1 of 3. App ID (the number after /apps/ in the address bar of your Meta app\'s pages): ',
+  appSecret: '2 of 3. App secret (on that page, click Show next to App secret). It is not shown on screen.',
   token: "3 of 3. Graph API Explorer's access token (copy button next to it). It is not shown on screen."
 };
+
+// The page with the app's ID and secret.
+function secretPage(appId) {
+  return `https://developers.facebook.com/apps/${appId}/settings/basic/`;
+}
 
 function graphBase() {
   return String(process.env.META_GRAPH_BASE || 'https://graph.facebook.com').replace(/\/+$/, '') + '/' + VERSION;
@@ -85,6 +93,11 @@ async function main() {
     } else {
       console.log('Meta token for your own Page and Instagram comments. It asks 3 questions.');
       appId = (await readVisible(QUESTIONS.appId)).trim();
+      if (!/^\d+$/.test(appId)) {
+        console.log('The app ID is a number: the digits after /apps/ in the address bar. Nothing was saved; run this command again.');
+        process.exit(1);
+      }
+      console.log(`   Open ${secretPage(appId)} (Meta may ask for your Facebook password).`);
       console.log(QUESTIONS.appSecret);
       appSecret = (await readHidden()).trim();
       console.log(QUESTIONS.token);
@@ -132,4 +145,4 @@ async function main() {
 
 if (require.main === module) main();
 
-module.exports = { NEEDED, QUESTIONS, pickPage, setUpToken };
+module.exports = { NEEDED, QUESTIONS, pickPage, secretPage, setUpToken };

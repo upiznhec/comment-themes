@@ -148,3 +148,9 @@ test('prepare shows what each post says and, with several batches, asks for one 
   assert.match(run.stdout, /Travel size launch/);
   assert.match(run.stdout, /There are 2 batches\. Keep the themes you use in .*themes\.md/);
 });
+
+test('the Meta script asks for the app ID itself and points to the page with the app secret', () => {
+  const { QUESTIONS, secretPage } = require('../scripts/meta-token');
+  assert.match(QUESTIONS.appId, /number after \/apps\//);
+  assert.equal(secretPage('1234567890'), 'https://developers.facebook.com/apps/1234567890/settings/basic/');
+});

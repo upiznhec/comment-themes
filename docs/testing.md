@@ -111,4 +111,8 @@ The user chose all four changes:
 
 Checks: `npm test`, 34 tests pass. Live run `dev-postinfo` (one TikTok video and the Reddit thread at one page each, and one YouTube video): the three posts' text was saved and printed by prepare.js, for 3 ScrapeCreators credits. Checking the endpoints first used 7 more credits.
 
-Still to do: the remaining Claude Code test requests, then the same tests in Codex and DeepSeek Harness.
+## 2026-11-21, DeepSeek Harness test (in progress)
+
+- After the person had made the Meta app, the agent asked them to tell it the app ID in the chat, as AGENTS.md said (so that it could give direct links). The user did not want to give it there. The agent no longer asks for anything about the app in the chat: the person opens Use cases from the app's left menu, and meta-token.js asks for the app ID in the terminal, then shows the link to the page with the app secret (the page a person could not find in the Claude test). Checks: `npm test`, 35 tests pass.
+
+Still to do: the rest of the DeepSeek Harness test, the remaining Claude Code test requests, and the Codex test.
