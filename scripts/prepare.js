@@ -11,7 +11,8 @@
 // posts with no comments stored yet are named. Without a request, the whole database is taken, narrowed by
 // the options.
 // Writes data/runs/<name>/comments.jsonl and batch-01.jsonl, batch-02.jsonl ... (short ID, text, likes;
-// no names), and prints the buckets to label with.
+// no names), and prints the buckets to label with. For a request it also prints what each post says itself
+// (posts.json, kept by fetch.js); with more than one batch it asks for one list of themes in themes.md.
 const fs = require('fs');
 const path = require('path');
 const { getDataDir } = require('./lib/env-file');
@@ -28,6 +29,20 @@ function option(name) {
 
 function options(name) {
   return process.argv.flatMap((item, i) => (item === `--${name}` && process.argv[i + 1] ? [process.argv[i + 1]] : []));
+}
+
+// What each requested post says itself, from data/runs/<name>/posts.json (kept by fetch.js), so that the
+// labels and the report know what the comments answer. In test 2 the report could only guess the topic
+// from the comments.
+function postsAbout(name, dataDir, links) {
+  let saved = [];
+  try { saved = JSON.parse(fs.readFileSync(path.join(runDir(name, dataDir), 'posts.json'), 'utf8')); } catch (error) { saved = []; }
+  const byUrl = new Map((Array.isArray(saved) ? saved : []).map(post => [post.url, post]));
+  return links.map(link => {
+    const post = byUrl.get(link);
+    const words = post ? [post.title, post.text].filter(Boolean).join(' | ').replace(/\s+/g, ' ').trim() : '';
+    return `  ${link}: ${words ? JSON.stringify(words.length > 300 ? `${words.slice(0, 300)}...` : words) : '(its own text was not saved)'}`;
+  });
 }
 
 // At most max comments from each post: a post with more keeps its most-liked ones (equal likes keep their
@@ -80,6 +95,8 @@ function main() {
     const empty = requested.filter(link => !stored.has(link));
     console.log(`Request ${name}: ${requested.length} posts.`);
     if (empty.length) console.log(`No comments stored for these posts (not read yet, nothing to read, or skipped):\n${empty.map(link => `  ${link}`).join('\n')}`);
+    console.log('What each post says itself (read this before labelling, and say in the report what each post is about):');
+    postsAbout(name, dataDir, requested).forEach(line => console.log(line));
   }
   if (!chosen.length) { console.log('No comments match. Read some with fetch.js or import.js first, or widen the choice.'); process.exit(1); }
   const dir = runDir(name, dataDir);
@@ -113,7 +130,7 @@ function main() {
   }
   console.log(`Run ${name}: ${rows.length} comments to label in ${batches} batches, in ${dir}`);
   if (sampled) {
-    console.log(`${plural(cut.length, 'post')} had more than ${max} comments, so only ${cut.length === 1 ? 'its' : 'their'} ${max} most-liked are included (${chosen.length} comments chosen in all; --all includes every one, which costs many more tokens):`);
+    console.log(`${plural(cut.length, 'post')} had more than ${max} comments, so only ${cut.length === 1 ? 'its' : 'their'} ${max} most-liked are included (${rows.length} of the ${chosen.length} comments are labelled; --all includes every one, which costs many more tokens):`);
     cut.forEach(post => console.log(`  ${post.post_url}: ${post.kept} of ${post.comments}`));
   }
   console.log(`Tell the person you will label ${rows.length} comments before you start.`);
@@ -122,9 +139,12 @@ function main() {
   console.log('Buckets:');
   for (const [bucket, meaning] of Object.entries(BUCKETS)) console.log(`  ${bucket}: ${meaning}`);
   console.log('A theme is a few words naming what the comment is about; reuse the same words for the same topic. not_useful needs no theme.');
+  if (batches > 1) {
+    console.log(`There are ${batches} batches. Keep the themes you use in ${path.join(dir, 'themes.md')}, one line each under its bucket, and reuse them word for word in later batches. To merge two themes, change the theme in every labels file and in themes.md, then tally again.`);
+  }
   console.log(`Then run: node scripts/tally.js --run ${name}`);
 }
 
 if (require.main === module) main();
 
-module.exports = { sample, select };
+module.exports = { postsAbout, sample, select };

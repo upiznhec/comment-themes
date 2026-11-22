@@ -14,7 +14,7 @@
 // --from-stdin reads the app ID, app secret and token from three lines of standard input (tests).
 
 const { envFilePath, getDataDir, writeEnvValue } = require('./lib/env-file');
-const { readHidden, readLines, readVisible } = require('./lib/prompt');
+const { looksLikeCommand, readHidden, readLines, readVisible } = require('./lib/prompt');
 
 const VERSION = 'v27.0';
 const NEEDED = {
@@ -97,6 +97,11 @@ async function main() {
   }
   if (!/^\d+$/.test(appId || '') || !appSecret || !shortToken) {
     console.log('The app ID must be a number, and the app secret and token cannot be empty. Nothing was saved.');
+    process.exit(1);
+  }
+  if (looksLikeCommand(appSecret) || looksLikeCommand(shortToken)) {
+    console.log('A command was pasted where the app secret or the token belongs: the clipboard still held it. Nothing was saved.');
+    console.log('Run this command again. At each question, copy that value on its page first, then paste it here.');
     process.exit(1);
   }
   const choose = fromStdin ? null : async pages => {

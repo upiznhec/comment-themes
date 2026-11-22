@@ -15,7 +15,7 @@
 // prompt (for tests).
 
 const { envFilePath, getDataDir, readEnvValues, removeEnvValue, writeEnvValue } = require('./lib/env-file');
-const { readHidden, readLine, readVisible } = require('./lib/prompt');
+const { looksLikeCommand, readHidden, readLine, readVisible } = require('./lib/prompt');
 
 const SECRETS = {
   scrapecreators: { name: 'SCRAPECREATORS_API_KEY', label: 'ScrapeCreators API key', shape: /^\S{16,}$/, hint: 'An API key is one long code with no spaces.' },
@@ -64,6 +64,11 @@ async function main() {
   value = String(value || '').trim();
   if (!value) {
     console.log('Nothing was pasted, so nothing was saved.');
+    process.exit(1);
+  }
+  if (looksLikeCommand(value)) {
+    console.log(`This is a command, not the ${secret.label}: the clipboard still held the command. Nothing was saved.`);
+    console.log('Run this command again. While it waits, click Copy on the key\'s page, come back and paste here.');
     process.exit(1);
   }
 

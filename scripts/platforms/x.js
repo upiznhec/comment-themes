@@ -77,6 +77,7 @@ async function readConversation(post, conversationId, entry, ctx) {
     for (const user of body.includes?.users || []) users.set(user.id, user);
     ctx.cost.xPosts += (body.data || []).length;
     ctx.cost.xUsers += (body.includes?.users || []).length;
+    ctx.progress?.(entry, page + 1, items.length);
     nextToken = body.meta?.next_token;
     if (!nextToken) break;
   }
@@ -102,6 +103,7 @@ async function read(entry, ctx) {
   ctx.cost.xPosts += 1;
   if (!tweet) throw new Error(`X: post ${id} not found (deleted or protected?)`);
   const post = postInfo('x', id, entry.url, tweet.created_at, tweet.public_metrics?.reply_count ?? null);
+  post.text = tweet.text || null;
   if (ctx.plan || post.comments === 0) return { posts: [post], records: [] };
   try {
     return { posts: [post], records: await readConversation(post, tweet.conversation_id || id, entry, ctx) };

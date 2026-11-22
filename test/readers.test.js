@@ -92,6 +92,32 @@ test('ScrapeCreators post link: the plan reads nothing; a read follows the curso
   const { records } = await sc.read(entry, c);
   assert.deepEqual(records.map(r => r.author_handle), ['buyer', 'two']);
   assert.equal(c.cost.scrapecreatorsCharged, 2);
+  assert.match(c.notes[0], /the post's own text could not be read/);
+});
+
+test('ScrapeCreators: the post\'s own text and comment count are read first, for 1 credit; progress is reported by page', async () => {
+  const asked = fake([
+    { test: u => u.pathname === '/v2/tiktok/video', body: () => ({ success: true, credits_charged: 1,
+      aweme_detail: { desc: 'Pokémon Happy Meal out now', create_time: 1763600000, statistics: { comment_count: 197 } } }) },
+    { test: u => u.pathname === '/v1/tiktok/video/comments', body: u => (u.searchParams.get('cursor')
+      ? { success: true, credits_charged: 1, has_more: false, comments: [{ cid: 'k2', text: 'Need the Munchlax one', create_time: 1763700100 }] }
+      : { success: true, credits_charged: 1, has_more: true, cursor: '20', comments: [{ cid: 'k1', text: 'Is it in Canada?', create_time: 1763700000 }] }) }
+  ]);
+  const pages = [];
+  const c = ctx({ progress: (entry, page, count) => pages.push([page, count]) });
+  const { posts: [post], records } = await sc.read({ platform: 'tiktok', route: 'scrapecreators', own: false, account: null, url: 'https://www.tiktok.com/@brand/video/123' }, c);
+  assert.equal(post.text, 'Pokémon Happy Meal out now');
+  assert.equal(post.comments, 197);
+  assert.equal(records.length, 2);
+  assert.equal(c.cost.scrapecreatorsCharged, 3);
+  assert.equal(asked[0].pathname, '/v2/tiktok/video');
+  assert.deepEqual(pages, [[1, 1], [2, 2]]);
+  const reddit = fake([{ test: u => u.pathname === '/v1/reddit/post/comments', body: () => ({ success: true, credits_charged: 1,
+    post: { title: 'Thoughts on the new menu?', selftext: 'Tried it today.', num_comments: 3, created_utc: 1763600000 }, comments: [], more: { has_more: false } }) }]);
+  const r = await sc.read({ platform: 'reddit', route: 'scrapecreators', own: false, account: 'r/x', url: 'https://www.reddit.com/r/x/comments/1/y/' }, ctx());
+  assert.equal(r.posts[0].title, 'Thoughts on the new menu?');
+  assert.equal(r.posts[0].text, 'Tried it today.');
+  assert.equal(reddit.length, 1);
 });
 
 test('X: the post is looked up, then replies get the replier from the user list; a reply to a reply keeps its parent', async () => {

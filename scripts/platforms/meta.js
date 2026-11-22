@@ -66,9 +66,10 @@ async function readInstagram(entry, ctx) {
   const code = shortcodeOf(entry.url);
   if (!code) throw new Error(`Instagram: no post code in ${entry.url}`);
   const has = item => String(item.permalink || '').includes(`/${code}/`);
-  const media = (await pages(`${ig}/media`, { fields: 'id,permalink,timestamp,comments_count', limit: '50' }, ctx, items => items.some(has))).find(has);
+  const media = (await pages(`${ig}/media`, { fields: 'id,permalink,timestamp,comments_count,caption', limit: '50' }, ctx, items => items.some(has))).find(has);
   if (!media) throw new Error(`Instagram: ${entry.url} is not a post of the Instagram account linked to your Page (the official route reads only that account's posts)`);
   const post = postInfo('instagram', media.id, entry.url, media.timestamp, media.comments_count ?? null);
+  post.text = media.caption ? String(media.caption).slice(0, 2000) : null;
   if (ctx.plan || !media.comments_count) return { posts: [post], records: [] };
   const records = [];
   const comments = await pages(`${media.id}/comments`, {
@@ -89,7 +90,7 @@ async function findFacebookPost(entry, ctx) {
   if (number) {
     for (const id of [`${page}_${number}`, number]) {
       try {
-        return await graph(id, { fields: 'id,permalink_url,created_time' }, ctx);
+        return await graph(id, { fields: 'id,permalink_url,created_time,message' }, ctx);
       } catch (error) { /* try the next form */ }
     }
   }
@@ -109,6 +110,7 @@ async function readFacebook(entry, ctx) {
   const found = await findFacebookPost(entry, ctx);
   const summary = await graph(`${found.id}/comments`, { summary: 'true', limit: '0', filter: 'stream' }, ctx);
   const post = postInfo('facebook', found.id, entry.url, found.created_time, summary.summary?.total_count ?? null);
+  post.text = found.message ? String(found.message).slice(0, 2000) : null;
   if (ctx.plan || post.comments === 0) return { posts: [post], records: [] };
   const comments = await pages(`${found.id}/comments`, { fields: 'id,message,created_time,like_count,comment_count,from,parent{id}', filter: 'stream', limit: '100' }, ctx);
   let withoutAuthor = 0;

@@ -103,3 +103,48 @@ test('the account a link names', () => {
   assert.equal(accountOfUrl('https://x.com/brand/status/1'), '@brand');
   assert.equal(accountOfUrl('https://www.instagram.com/p/CODE/'), null);
 });
+
+test('saving a key refuses the save command pasted by mistake, and nothing is saved', () => {
+  const { looksLikeCommand } = require('../scripts/lib/prompt');
+  const command = 'cd /Users/someone/CommentThemes && node scripts/save-secret.js scrapecreators';
+  assert.equal(looksLikeCommand(command), true);
+  assert.equal(looksLikeCommand('node scripts/meta-token.js'), true);
+  assert.equal(looksLikeCommand('sc_1a2b3c4d5e6f7g8h9i0j'), false);
+  assert.equal(looksLikeCommand('AIzaSyExampleExampleExampleExample12345'), false);
+  const dir = tempDir();
+  const run = require('node:child_process').spawnSync(process.execPath, [path.join(__dirname, '..', 'scripts', 'save-secret.js'), 'scrapecreators', '--from-stdin'],
+    { input: `${command}\n`, env: { ...process.env, COMMENT_THEMES_DATA_DIR: dir }, encoding: 'utf8' });
+  assert.equal(run.status, 1);
+  assert.match(run.stdout, /This is a command, not the ScrapeCreators API key/);
+  assert.equal(fs.existsSync(path.join(dir, '.env')), false);
+});
+
+test('what each post says is kept by its link, and a later read without the text keeps the earlier one', () => {
+  const { savePosts } = require('../scripts/fetch');
+  const { postsAbout } = require('../scripts/prepare');
+  const dir = tempDir();
+  const link = 'https://www.instagram.com/p/SAMPLE/';
+  savePosts('run-1', dir, [{ platform: 'instagram', url: link, time: '2026-11-20T00:00:00.000Z', comments: 40, text: 'The new travel size is here' }]);
+  savePosts('run-1', dir, [{ platform: 'instagram', url: link, time: null, comments: 42, text: null }]);
+  const [saved] = JSON.parse(fs.readFileSync(path.join(dir, 'runs', 'run-1', 'posts.json'), 'utf8'));
+  assert.equal(saved.text, 'The new travel size is here');
+  assert.equal(saved.comments_shown, 42);
+  const lines = postsAbout('run-1', dir, [link, 'https://www.tiktok.com/@x/video/1']);
+  assert.match(lines[0], /The new travel size is here/);
+  assert.match(lines[1], /its own text was not saved/);
+});
+
+test('prepare shows what each post says and, with several batches, asks for one theme list', () => {
+  const dir = tempDir();
+  const link = 'https://www.youtube.com/watch?v=SAMPLE1';
+  addRecords([comment({ comment_id: 'a', post_url: link }), comment({ comment_id: 'b', post_url: link, text: 'Where can I buy it?' })], dir);
+  fs.mkdirSync(path.join(dir, 'runs', 'run-2'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'runs', 'run-2', 'request.json'), JSON.stringify({ posts: [{ url: link }] }));
+  require('../scripts/fetch').savePosts('run-2', dir, [{ platform: 'youtube', url: link, title: 'Travel size launch', text: null, comments: 2 }]);
+  const run = require('node:child_process').spawnSync(process.execPath, [path.join(__dirname, '..', 'scripts', 'prepare.js'), '--run', 'run-2', '--batch', '1'],
+    { env: { ...process.env, COMMENT_THEMES_DATA_DIR: dir }, encoding: 'utf8' });
+  assert.equal(run.status, 0, run.stdout + run.stderr);
+  assert.match(run.stdout, /What each post says itself/);
+  assert.match(run.stdout, /Travel size launch/);
+  assert.match(run.stdout, /There are 2 batches\. Keep the themes you use in .*themes\.md/);
+});

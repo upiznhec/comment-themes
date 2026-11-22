@@ -92,4 +92,23 @@ Checks: `npm test`, 30 tests pass (one new: the line after reading a post counts
 
 The user then corrected the first wording of rule 8, "Assume nothing is set up yet". Their rule is not to assume that anything is set up, which is not the same as assuming that nothing is: the agent checks what is there instead of taking either for granted. Rule 8 now reads "Do not assume anything is set up", and the sentences that point to it were changed to match.
 
+## 2026-11-21, Claude Code test 2: other people's posts
+
+In the same Claude Code session, the user first updated the workflow twice (both pulls kept every file in `data/`, which the agent checked with checksums) and asked two questions about test 1, which `find.js` answered. Then they sent a request from the task page with eight public McDonald's posts, none read through ScrapeCreators before: one Instagram post, one Facebook post, one X post, four TikTok videos and one Reddit thread. They chose the brand with the research in mind: people want to find what is commercially useful in large numbers of comments. They were satisfied with the result and asked what to change.
+
+What happened:
+- ScrapeCreators: the agent opened the dashboard in the user's Chrome (already signed in), and the user copied and saved the key. The first save stored the save command itself (85 characters, with spaces), because the clipboard still held the command. check-keys.js showed HTTP 401; the agent found the cause by comparing lengths without showing the value. The second save worked.
+- The agent asked how many pages to read per post, and the user chose 100. The seven ScrapeCreators posts were read in the background in about 11 minutes for 156 credits: Instagram 1,392 comments (169 without text), Facebook 694 (7 without text), Reddit 25, TikTok 226, 126, 199 and 322. The user had to ask whether it was progressing.
+- X: the plan priced the post's 951 replies at about US$14.26. The user chose the 300 most relevant, at most US$4.50: 301 were read for about US$4.12, plus US$0.005 for the lookup. The agent read X only after the ScrapeCreators read had finished, so that two reads did not write the database at once.
+- Analysis: 3,072 comments were read; the Instagram post was cut to its 1,000 most-liked, which left 2,849 to label in 19 batches (about 19 minutes). The agent kept its own list of themes in its scratchpad and renamed five themes across batches. `tally.js` counted 1,948 useful and 901 not useful comments in 50 themes, and all 58 quotes passed `check-quotes.js`. The report could say what the posts were about only "judging from the comments", because the posts' own text was not saved.
+
+The user chose all four changes:
+- save-secret.js and meta-token.js refuse a pasted command and save nothing. Rule 2 asks the person to run the command first and copy the key while it waits. The task page has its first "If it goes wrong" entry for this.
+- fetch.js prints a line as each post starts and every 10 pages. Section 3 says a ScrapeCreators page takes about 4 seconds and asks the agent to say how long a read of more than about 50 pages will take.
+- With more than one batch, the agent keeps the themes in `data/runs/<name>/themes.md` and reuses them; prepare.js says so.
+- fetch.js keeps what each post says itself in `data/runs/<name>/posts.json`: the YouTube title and description, the X text, the Instagram caption and Facebook message through Meta, and the caption or description through ScrapeCreators. ScrapeCreators' comment endpoints do not give it (checked on four of these posts), so its post endpoints are read first, for 1 more credit on Instagram, TikTok and Facebook; Reddit's title and text come with the comments. The post endpoints also give the post's comment count, so the line after reading now says how many the post shows. prepare.js prints the posts' text before labelling.
+- prepare.js no longer says the request's comments were "chosen in all" when only some of them are labelled.
+
+Checks: `npm test`, 34 tests pass. Live run `dev-postinfo` (one TikTok video and the Reddit thread at one page each, and one YouTube video): the three posts' text was saved and printed by prepare.js, for 3 ScrapeCreators credits. Checking the endpoints first used 7 more credits.
+
 Still to do: the remaining Claude Code test requests, then the same tests in Codex and DeepSeek Harness.

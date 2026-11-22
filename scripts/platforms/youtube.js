@@ -81,6 +81,7 @@ async function readVideo(post, entry, ctx) {
         for (const reply of inline) records.push(record(reply.snippet, reply.id, top.id, entry, post));
       }
     }
+    ctx.progress?.(entry, page + 1, records.length);
     pageToken = body.nextPageToken;
     if (!pageToken) break;
   }
@@ -94,6 +95,8 @@ async function read(entry, ctx) {
   if (!video) throw new Error(`YouTube: video ${id} not found (private or deleted?)`);
   const counted = video.statistics?.commentCount !== undefined;
   const post = postInfo('youtube', id, entry.url, video.snippet?.publishedAt, counted ? Number(video.statistics.commentCount) : 0);
+  post.title = video.snippet?.title || null;
+  post.text = video.snippet?.description ? String(video.snippet.description).slice(0, 2000) : null;
   if (!counted) { ctx.notes.push(`YouTube ${id}: comments are turned off`); return { posts: [post], records: [] }; }
   if (ctx.plan || !post.comments) return { posts: [post], records: [] };
   const withChannel = { ...entry, account: entry.account || video.snippet?.channelTitle || null };

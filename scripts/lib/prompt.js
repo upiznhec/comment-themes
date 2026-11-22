@@ -80,6 +80,14 @@ function readHidden(input = process.stdin, output = process.stdout, options = {}
   });
 }
 
+// A command pasted where a key belongs. In a test the clipboard still held the save command, because the
+// Copy click on the key's page had not worked, and the command was saved as the key. Keys and tokens have
+// no spaces, so this never matches one.
+function looksLikeCommand(value) {
+  const text = String(value || '').trim();
+  return /\s/.test(text) && /(^|\s)(cd|node|npm|bash)\s|save-secret\.js|meta-token\.js|&&/.test(text);
+}
+
 // A visible question, answered with Return.
 function readVisible(question, input = process.stdin, output = process.stdout) {
   return new Promise(resolve => {
@@ -92,6 +100,7 @@ function readVisible(question, input = process.stdin, output = process.stdout) {
 }
 
 module.exports = {
+  looksLikeCommand,
   pasteCount,
   readHidden,
   readLine,

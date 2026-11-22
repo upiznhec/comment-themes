@@ -9,7 +9,8 @@ Copyright (c) 2026 ScrapeCreators, MIT License (full text in LICENSE in this fol
 Not affiliated with or endorsed by ScrapeCreators. Changes: comments come from this repository's database
 (official APIs, the TikTok Social connector, ScrapeCreators or an import) instead of ScrapeCreators calls only;
 a post with more than 1,000 comments is analysed on its 1,000 most-liked;
-a not_useful bucket stands for the cleaning step; scripts do the counting and check the quotes. The buckets, the
+a not_useful bucket stands for the cleaning step; scripts do the counting and check the quotes; what each
+post says itself is shown before labelling, and one list of themes is kept across batches. The buckets, the
 themes, the report format, the guardrails and the pitfalls are the original's. -->
 
 # Comment Mining
@@ -30,11 +31,11 @@ Use this skill when the person asks to:
 
 ## Where the comments come from
 
-From `data/comments.jsonl`, filled for each request (the post links in `data/runs/<name>/request.json`) by `scripts/fetch.js` (YouTube, Instagram, Facebook, X, Reddit, TikTok through ScrapeCreators) and `scripts/import.js` (TikTok through the TikTok Social connector, pasted comments, CSV files). AGENTS.md says how each source is set up. Do not read comments any other way.
+From `data/comments.jsonl`, filled for each request (the post links in `data/runs/<name>/request.json`) by `scripts/fetch.js` (YouTube, Instagram, Facebook, X, Reddit, TikTok through ScrapeCreators) and `scripts/import.js` (TikTok through the TikTok Social connector, pasted comments, CSV files). AGENTS.md says how each source is set up. Do not read comments any other way. What each post says itself is kept in `data/runs/<name>/posts.json` when fetch.js reads it.
 
 ## Workflow
 
-1. **Choose the comments**: `node scripts/prepare.js --run <name>`. For a request it takes the comments of the request's posts; without one, the whole database and the person's filters. A post with more than 1,000 comments is analysed on its 1,000 most-liked; say so in the Summary, for example `Comments analyzed: 1,240 (the 1,000 most-liked of the 3,000 read on one video, and all 240 on the other posts)`. It writes batches of short IDs, text and likes, without names.
+1. **Choose the comments**: `node scripts/prepare.js --run <name>`. For a request it takes the comments of the request's posts; without one, the whole database and the person's filters. A post with more than 1,000 comments is analysed on its 1,000 most-liked; say so in the Summary, for example `Comments analyzed: 1,240 (the 1,000 most-liked of the 3,000 read on one video, and all 240 on the other posts)`. It writes batches of short IDs, text and likes, without names. For a request it also prints what each post says itself (from `posts.json`); read it first, so that you know what the comments answer, and name each post's topic in the Summary.
 
 2. **Clean lightly** (while labelling)
    - Label obvious spam, emoji-only comments, tagged friends and off-topic comments `not_useful`.
@@ -52,7 +53,7 @@ From `data/comments.jsonl`, filled for each request (the post links in `data/run
    - debate (controversy/debate)
    - culture (jokes/memes/culture signals)
 
-   Give each one a theme: a few words naming what it is about, reused word for word for the same topic. Write one line per comment to `data/runs/<name>/labels.jsonl`: `{"id":"C0001","bucket":"questions","theme":"price of the travel size"}`. Label every comment of every batch.
+   Give each one a theme: a few words naming what it is about, reused word for word for the same topic. Write one line per comment to `data/runs/<name>/labels.jsonl`: `{"id":"C0001","bucket":"questions","theme":"price of the travel size"}`. Label every comment of every batch. With more than one batch, keep the themes in `data/runs/<name>/themes.md` as you go and reuse them word for word.
 
 4. **Cluster themes**
    - Run `node scripts/tally.js --run <name>`. It refuses missing, doubled or unknown labels; fix them and run it again.

@@ -12,8 +12,15 @@
 //            --no-replies (YouTube)
 // Own TikTok videos with the route "mcp" are read by the agent through the TikTok Social connector; this
 // script only lists them. Prints counts and costs, never comment text or names.
+// While reading, it prints a line as each post starts and every 10 pages, so that a long read run in the
+// background shows how far it has got (in a test, 156 ScrapeCreators pages took 11 minutes). What each post
+// says itself (caption, title or text, where the platform gives it) is kept in data/runs/<name>/posts.json
+// for the analysis.
+const fs = require('fs');
+const path = require('path');
 const { getDataDir, loadEnvFile } = require('./lib/env-file');
 const { addRecords, withoutText } = require('./lib/db');
+const { runDir } = require('./lib/runs');
 const { loadRequest } = require('./lib/sources');
 const { newCost } = require('./platforms/common');
 
@@ -51,10 +58,34 @@ function readSummary(records, post) {
     + (blank ? `; ${blank} of them ${blank === 1 ? 'has' : 'have'} no text and ${blank === 1 ? 'is' : 'are'} not stored` : '');
 }
 
+// Keeps what each post says in data/runs/<name>/posts.json, by its link as written in the request. A later
+// read that could not get the text keeps the text read before.
+function savePosts(name, dataDir, posts) {
+  if (!posts.length) return;
+  const file = path.join(runDir(name, dataDir), 'posts.json');
+  let saved = [];
+  try { saved = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (error) { saved = []; }
+  const byUrl = new Map((Array.isArray(saved) ? saved : []).map(post => [post.url, post]));
+  for (const post of posts) {
+    const old = byUrl.get(post.url) || {};
+    byUrl.set(post.url, {
+      platform: post.platform, url: post.url, time: post.time || old.time || null,
+      comments_shown: typeof post.comments === 'number' ? post.comments : old.comments_shown ?? null,
+      title: post.title ?? old.title ?? null, text: post.text ?? old.text ?? null
+    });
+  }
+  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+  fs.writeFileSync(file, JSON.stringify([...byUrl.values()], null, 2) + '\n', { mode: 0o600 });
+}
+
 // What reading one post's comments costs, from its comment count and the page limit.
 function estimate(entry, post, maxPages) {
   const n = post.comments;
-  if (entry.route === 'scrapecreators') return `about 1 ScrapeCreators credit for every ${PER_PAGE[entry.platform]} comments, at most ${plural(maxPages, 'credit')} for this post (the count is known only after reading)`;
+  if (entry.route === 'scrapecreators') {
+    // Reddit's post text comes with its comments; the others cost 1 more credit for it.
+    const own = entry.platform === 'reddit' ? 0 : 1;
+    return `about 1 ScrapeCreators credit for every ${PER_PAGE[entry.platform]} comments${own ? ', plus 1 for the post\'s own text' : ''}, at most ${plural(maxPages + own, 'credit')} for this post (the count is known only after reading)`;
+  }
   if (entry.platform === 'x') {
     // X's count is of direct replies only; the conversation search also returns replies to replies.
     const cap = maxPages * 100;
@@ -83,8 +114,12 @@ async function main() {
   request.problems.forEach(problem => console.log(`Not read yet: ${problem}`));
   const chosen = request.entries.filter(e => (!onlyPlatform || e.platform === onlyPlatform) && (!onlyPost || e.url.toLowerCase().includes(onlyPost)));
   const ctx = { env: process.env, plan, maxPages: Number(arg('max-pages', 30)), noReplies: process.argv.includes('--no-replies'), cost: newCost(), notes: [] };
+  ctx.progress = (entry, pages, count) => {
+    if (pages % 10 === 0) console.log(`  ${entry.platform} ${entry.url}: ${plural(pages, 'page')} read, ${plural(count, 'comment')} so far`);
+  };
   console.log(`${plan ? 'Plan' : 'Reading'} for ${name}: ${plural(chosen.length, 'post')}; every comment of each is read.`);
   const all = [];
+  const readPosts = [];
   for (const entry of chosen) {
     const label = `${entry.platform} (${entry.own === true ? 'own' : entry.own === false ? 'not own' : 'owner not said'}, ${entry.route}) ${entry.url}`;
     if (entry.route === 'mcp') {
@@ -94,10 +129,12 @@ async function main() {
     const missing = (NEEDS[entry.route === 'scrapecreators' ? 'scrapecreators' : entry.platform] || []).filter(key => !process.env[key]);
     if (missing.length) { console.log(`${label}: not read, key not saved yet: ${missing.join(', ')}`); continue; }
     try {
+      if (!plan) console.log(`${label}: reading`);
       const { posts: [post], records, skipped } = await READERS[`${entry.platform}:${entry.route}`].read(entry, ctx);
       if (skipped) console.log(`${label}: skipped, ${skipped}.`);
       else if (plan) console.log(`${label}: ${post.comments ?? 'unknown number of'} comments; reading them: ${post.comments === 0 ? 'nothing to read' : estimate(entry, post, ctx.maxPages)}.`);
       else console.log(`${label}: ${readSummary(records, post)}.`);
+      if (!plan && post) readPosts.push(post);
       all.push(...records);
     } catch (error) {
       console.log(`${label}: stopped: ${error.message}`);
@@ -106,6 +143,7 @@ async function main() {
   if (!plan) {
     const result = addRecords(all, dataDir);
     console.log(`Database: ${result.added} new, ${result.updated} updated, ${result.total} comments in all.`);
+    savePosts(name, dataDir, readPosts);
   }
   ctx.notes.forEach(note => console.log(`Note: ${note}`));
   const c = ctx.cost;
@@ -118,4 +156,4 @@ async function main() {
 
 if (require.main === module) main();
 
-module.exports = { estimate, readSummary };
+module.exports = { estimate, readSummary, savePosts };
