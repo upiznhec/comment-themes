@@ -28,7 +28,7 @@ When the person asks you to set this up, download the repository (with git, or a
 ## Each request
 
 ### 1. Write the request
-Give the request a name (letters, digits, dots and dashes, such as `2026-11-21-launch`) and write its links to `data/runs/<name>/request.json`:
+Give the request a name of its own, from its date and what it is about, never the name of an earlier request, even one you remember from another chat (in a test, a request for the person's own posts was saved under the earlier name `2026-11-22-mcdonalds`). Use letters, digits, dots and dashes, such as `2026-11-21-launch` or `2026-11-22-own-posts`, and write its links to `data/runs/<name>/request.json`:
 
 ```json
 {
@@ -117,6 +117,8 @@ fetch.js only lists them. With the bridge (section 4), `node scripts/tiktok-brid
 A share link to a post of their Page (`pfbid...` or `/share/...`) is looked for among the Page's posts. If it is not found, fetch.js lists the Page's latest posts with their dates and first words. First make sure the post is on this Page at all (section 4, Meta, step 1): a post on a personal profile or on another Page cannot be read with this token, and then you do not offer this Page's posts in its place. If it is on this Page, ask which of the listed posts it is, and put that post's link in `request.json` instead.
 
 ### 7. The analysis
+Start it only when every post of the request has been read, or the person has chosen to leave one out. If a post has to wait (a restart of your app for a connector, a key they have not made yet), tell them which post is left and why, and wait: no labels, report or findings for the posts already read unless they ask for them (in a test, the agent reported on three posts while the fourth waited for a restart, and the person did not want that).
+
 1. `node scripts/prepare.js --run <name>`. It takes the comments of the request's posts and names any post with no comments stored (not read yet, nothing to read, or skipped). A post with more than 1,000 comments is analysed on its 1,000 most-liked (the same limit per post as ScrapeCreators' YouTube comments endpoint, which returns at most about 1,000 top comments a video); every comment of the other posts is included. Before labelling, tell the person how many comments you will label. Use `--all` only if they ask to label every comment, after telling them it uses many more tokens (about 15 tokens of text per comment, before the labels). It also prints what each post says itself (its caption, title or text, kept in `posts.json` when fetch.js read it): read it before labelling, so you know what the comments answer, and say in the report's summary what each post is about. Posts read through the TikTok connector, pasted or imported have no saved text; ask the person what the post is about if the comments do not make it clear.
 2. Label every batch as `skills/comment-mining/SKILL.md` says, into `data/runs/<name>/labels.jsonl` (or one file per batch, `labels-01.jsonl` and so on). With more than one batch, keep the themes you use in `data/runs/<name>/themes.md`, one line each under its bucket, and reuse them word for word in later batches. To merge two themes, change the theme in every labels file and in `themes.md`, then tally again.
 3. `node scripts/tally.js --run <name>` until it reports no problems.
