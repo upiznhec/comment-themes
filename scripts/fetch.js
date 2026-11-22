@@ -9,13 +9,15 @@
 //                                               US$0.005)
 //   node scripts/fetch.js --run <name>          reads them all
 //   options: --platform <name> (more than once, or a list)  --post <part of a link>  --max-pages <n> (comment pages per post, default 30)
-//            --no-replies (YouTube)
+//            --no-replies (YouTube)  --again (read posts this request has read before)
 // Own TikTok videos with the route "mcp" are read by the agent through the TikTok Social connector; this
 // script only lists them. Prints counts and costs, never comment text or names.
 // While reading, it prints a line as each post starts and every 10 pages, so that a long read run in the
 // background shows how far it has got (in a test, 156 ScrapeCreators pages took 11 minutes). What each post
 // says itself (caption, title or text, where the platform gives it) is kept in data/runs/<name>/posts.json
-// for the analysis.
+// for the analysis. A post this request has already read is not read again unless --again is given (in the
+// Codex test, a "yes" meant for another question started the same paid read of seven posts a second time);
+// the posts read, with when and how many comments, are kept in data/runs/<name>/reads.json.
 const fs = require('fs');
 const path = require('path');
 const { getDataDir, loadEnvFile } = require('./lib/env-file');
@@ -95,6 +97,28 @@ function savePosts(name, dataDir, posts) {
   fs.writeFileSync(file, JSON.stringify([...byUrl.values()], null, 2) + '\n', { mode: 0o600 });
 }
 
+// The posts this request has read, by link as written in the request: { link: { at, comments } }.
+function loadReads(name, dataDir) {
+  try {
+    const saved = JSON.parse(fs.readFileSync(path.join(runDir(name, dataDir), 'reads.json'), 'utf8'));
+    return saved && typeof saved === 'object' && !Array.isArray(saved) ? saved : {};
+  } catch (error) {
+    return {};
+  }
+}
+
+function saveReads(name, dataDir, reads) {
+  const file = path.join(runDir(name, dataDir), 'reads.json');
+  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+  fs.writeFileSync(file, JSON.stringify(reads, null, 2) + '\n', { mode: 0o600 });
+}
+
+// The chosen posts to read now, and those this request has read already (read again only with --again).
+function splitRead(entries, reads, again) {
+  if (again) return { todo: entries, done: [] };
+  return { todo: entries.filter(entry => !reads[entry.url]), done: entries.filter(entry => reads[entry.url]) };
+}
+
 // What reading one post's comments costs, from its comment count and the page limit.
 function estimate(entry, post, maxPages) {
   const n = post.comments;
@@ -112,7 +136,7 @@ function estimate(entry, post, maxPages) {
   if (entry.platform === 'youtube') {
     const units = Math.min(Math.ceil(n / 100), maxPages) + 1;
     const partial = n > maxPages * 100 ? `; with more than ${maxPages * 100} comments it may be read only in part (up to ${maxPages * 100} comment threads, top comments first)` : '';
-    const quota = units > 9000 ? '; more than one day\'s 10,000 free units: the read stops when they run out, and running it again the next day continues, keeping what was read' : '';
+    const quota = units > 9000 ? '; more than one day\'s 10,000 free units: the read stops when they run out, and running it again the next day with --again continues, keeping what was read' : '';
     return `about ${plural(units, 'YouTube quota unit')} or more for long reply threads (free)${partial}${quota}`;
   }
   return 'free';
@@ -132,10 +156,18 @@ async function main() {
   ctx.progress = (entry, pages, count) => {
     if (pages % 10 === 0) console.log(`  ${entry.platform} ${entry.url}: ${plural(pages, 'page')} read, ${plural(count, 'comment')} so far`);
   };
-  console.log(`${plan ? 'Plan' : 'Reading'} for ${name}: ${plural(chosen.length, 'post')}; every comment of each is read.`);
+  const reads = loadReads(name, dataDir);
+  const { todo, done } = splitRead(chosen, reads, process.argv.includes('--again'));
+  console.log(`${plan ? 'Plan' : 'Reading'} for ${name}: ${plural(todo.length, 'post')}; every comment of each is read.`);
+  for (const entry of done) {
+    const before = reads[entry.url];
+    const when = typeof before.at === 'string' ? `${before.at.slice(0, 16).replace('T', ' ')} UTC` : 'earlier';
+    console.log(`${entry.platform} ${entry.url}: already read for this request (${when}, ${plural(Number(before.comments) || 0, 'comment')}); not read again. To read it again, for new comments or more pages, add --again: it costs as much as the first read.`);
+  }
   const all = [];
   const readPosts = [];
-  for (const entry of chosen) {
+  const fresh = {};
+  for (const entry of todo) {
     const label = `${entry.platform} (${entry.own === true ? 'own' : entry.own === false ? 'not own' : 'owner not said'}, ${entry.route}) ${entry.url}`;
     if (entry.route === 'mcp') {
       console.log(`${label}: read through the TikTok Social connector, by the agent (then import.js --tiktok-mcp <file> --post <this link>) or, if the app cannot add the connector, with node scripts/tiktok-bridge.js --run ${name}.`);
@@ -150,6 +182,7 @@ async function main() {
       else if (plan) console.log(`${label}: ${post.comments ?? 'unknown number of'} comments; reading them: ${post.comments === 0 ? 'nothing to read' : estimate(entry, post, ctx.maxPages)}.`);
       else console.log(`${label}: ${readSummary(records, post)}.`);
       if (!plan && post) readPosts.push(post);
+      if (!plan) fresh[entry.url] = { at: new Date().toISOString(), comments: records.length };
       all.push(...records);
     } catch (error) {
       console.log(`${label}: stopped: ${error.message}`);
@@ -159,6 +192,7 @@ async function main() {
     const result = addRecords(all, dataDir);
     console.log(`Database: ${result.added} new, ${result.updated} updated, ${result.total} comments in all.`);
     savePosts(name, dataDir, readPosts);
+    if (Object.keys(fresh).length) saveReads(name, dataDir, { ...reads, ...fresh });
   }
   ctx.notes.forEach(note => console.log(`Note: ${note}`));
   const c = ctx.cost;
@@ -171,4 +205,4 @@ async function main() {
 
 if (require.main === module) main();
 
-module.exports = { estimate, pick, readSummary, savePosts };
+module.exports = { estimate, loadReads, pick, readSummary, saveReads, savePosts, splitRead };

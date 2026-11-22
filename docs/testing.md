@@ -136,3 +136,28 @@ The user wants to record the Codex test, so they first tried the TikTok Social c
 
 Change: AGENTS.md section 4 gives these steps for the Codex app, and asks the agent to give the person, before they restart, one short message to paste into a new chat to carry on. A chat that was open before the sign-in may keep answering that authorization is required: a known Codex issue (openai/codex#29279); in this test the new chat worked at once.
 
+## 2026-11-22, Codex test: other people's posts and the user's own posts
+
+The user ran the test in the Codex app (inside the ChatGPT desktop app) and recorded it, in a new folder, with no screenshots; this log is from Codex's own records. First a request with eight public McDonald's posts (one Instagram, one Facebook, one X, four TikTok videos, one Reddit thread), then a question about the report, then "Remove the workflow"; then, in a second chat in the same folder, the user's own four posts (YouTube, Instagram, Facebook, TikTok, all through their official routes), and a third chat after a restart for the TikTok video.
+
+What happened:
+- Both set-ups from an empty folder worked (all tests passed). ScrapeCreators: the agent opened the site, gave the save command, checked the key and asked before using up to 216 credits; the read reported its progress. X: after the fix below, the app and its token were made without trouble; the person approved US$15 at most for the 951 replies, and 906 were read for about US$12.63. The report covered 2,681 comments, and its 18 quotes passed `check-quotes.js`; the follow-up question was answered with 8 checked quotes.
+- "Remove the workflow": the agent listed what it would delete, waited, deleted it, checked that the folder was empty and named the keys to revoke at ScrapeCreators and X.
+- Own posts: in Chrome the agent saw a school and a personal Google account and asked which to use. After the fixes below, the five Meta steps took about 12 minutes; when the Facebook link did not match the Page, it asked who had posted it, found the post and asked the person to confirm it. The agent added the TikTok connector itself with `codex mcp add tiktok-social --url …` (with the person's approval); the sign-in worked, but the tools appeared only after a restart, in a new chat, as AGENTS.md says. The new chat read the video's 4 comments; the report covered 17 comments on the four posts.
+
+Fixed during the test, at the user's request:
+- X: the agent opened a guessed address (`console.x.com/apps`, which showed the Dashboard) and put five actions in one message without the form's fields. AGENTS.md now opens console.x.com itself and gives the token steps in the console's words (5e24bd7, then 745ff63).
+- Meta: before each step the agent asked the person to describe the screen ("Tell me what the first screen asks for"), two extra rounds. Rule 3, "When the clicks are theirs", now gives a whole step in one message, as a numbered list, one action per line, and asks what they see only when something does not match (5bab91d, then 745ff63 after the user found one message per screen still too slow). The Meta risk warning stays in every message (the user's choice).
+- The agent reported on three of the four own posts while the TikTok video waited for the restart. Section 7 now starts only when every post is read or the person leaves one out (929f757). The same commit asked for a new run name for each request (the own posts were saved under the earlier name `2026-11-22-mcdonalds`); the user withdrew that change, and it is undone here.
+
+Fixed after the test (the user chose 6 to 9 of the findings):
+- After the ScrapeCreators read had finished, the person's "yes" to the X step ("reply ready") was taken as the OK for the read, and the seven posts were read again: about 100 credits more, which the agent then called "unexplained". fetch.js now keeps the posts a request has read (`data/runs/<name>/reads.json`) and does not read them again unless `--again` is given, also in the plan; rule 4 says that a paid read starts only after an OK to its own question.
+- The 2,681 comments were labelled by a keyword script the agent wrote, then about 100 were fixed by hand. AGENTS.md section 7 and the skill now say to read each comment and never to label with keyword or pattern rules.
+- In Chrome the agent made a second Google Cloud project called Comment themes before noticing the first, and left it unused; it also gave the save command twice for one key. The YouTube step now says to look for the project first and to make only one; rule 2 says to give the save command once.
+- The person asked for a link to find the Meta app ID. Meta step 5 and meta-token.js's first question now give https://developers.facebook.com/apps.
+
+Not changed: the X question offered only a US$15 ceiling, where in Claude test 2 the agent had also offered the 300 most relevant replies for at most US$4.50 (left as it is). Checked, not changed: the run logged 93 ScrapeCreators credits while the balance fell by 108. Every ScrapeCreators call, the post lookups included, goes through one function that adds the credits each answer reports, and the plan makes no paid call; so some answers charged credits without reporting them. Measuring the balance before and after a read would give the exact figure.
+
+Checks: `npm test`, 38 tests pass (a new one for posts read already). The full list with times is in the test's findings file.
+
+All three agents (Claude Code, DeepSeek Harness and Codex) have now been tested.

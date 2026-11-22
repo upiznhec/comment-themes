@@ -28,7 +28,7 @@ const NEEDED = {
 // person did not want to give it there). Once it is typed, the script shows the link to the app secret,
 // which a person could not find from the app's menu in the Claude test.
 const QUESTIONS = {
-  appId: '1 of 3. App ID (the number after /apps/ in the address bar of your Meta app\'s pages): ',
+  appId: '1 of 3. App ID (open https://developers.facebook.com/apps and click your app: it is the number after /apps/ in the address bar): ',
   appSecret: '2 of 3. App secret (on that page, click Show next to App secret). It is not shown on screen.',
   token: "3 of 3. Graph API Explorer's access token (copy button next to it). It is not shown on screen."
 };

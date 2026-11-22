@@ -10,7 +10,8 @@ Not affiliated with or endorsed by ScrapeCreators. Changes: comments come from t
 (official APIs, the TikTok Social connector, ScrapeCreators or an import) instead of ScrapeCreators calls only;
 a post with more than 1,000 comments is analysed on its 1,000 most-liked;
 a not_useful bucket stands for the cleaning step; scripts do the counting and check the quotes; what each
-post says itself is shown before labelling, and one list of themes is kept across batches. The buckets, the
+post says itself is shown before labelling, and one list of themes is kept across batches; each comment is labelled by
+reading it, never by keyword rules. The buckets, the
 themes, the report format, the guardrails and the pitfalls are the original's. -->
 
 # Comment Mining
@@ -53,7 +54,7 @@ From `data/comments.jsonl`, filled for each request (the post links in `data/run
    - debate (controversy/debate)
    - culture (jokes/memes/culture signals)
 
-   Give each one a theme: a few words naming what it is about, reused word for word for the same topic. Write one line per comment to `data/runs/<name>/labels.jsonl`: `{"id":"C0001","bucket":"questions","theme":"price of the travel size"}`. Label every comment of every batch. With more than one batch, keep the themes in `data/runs/<name>/themes.md` as you go and reuse them word for word.
+   Give each one a theme: a few words naming what it is about, reused word for word for the same topic. Write one line per comment to `data/runs/<name>/labels.jsonl`: `{"id":"C0001","bucket":"questions","theme":"price of the travel size"}`. Label every comment of every batch by reading it: decide each bucket and theme yourself, never with keyword or pattern rules (in a test, an agent labelled 2,681 comments with a keyword script). With more than one batch, keep the themes in `data/runs/<name>/themes.md` as you go and reuse them word for word.
 
 4. **Cluster themes**
    - Run `node scripts/tally.js --run <name>`. It refuses missing, doubled or unknown labels; fix them and run it again.

@@ -172,3 +172,21 @@ test('several platforms can be read in one go, and a TikTok post list answer kee
   assert.equal(saved.text, 'Scoreboard animation');
   assert.equal(saved.comments_shown, 4);
 });
+
+test('a post this request has read is not read again without --again (a second paid read in the Codex test)', () => {
+  const { loadReads, saveReads, splitRead } = require('../scripts/fetch');
+  const dir = tempDir();
+  const a = { platform: 'instagram', url: 'https://www.instagram.com/p/A1/' };
+  const b = { platform: 'tiktok', url: 'https://www.tiktok.com/@sample/video/1' };
+  assert.deepEqual(loadReads('run-r', dir), {});
+  saveReads('run-r', dir, { [a.url]: { at: '2026-11-22T08:28:30.000Z', comments: 704 } });
+  const reads = loadReads('run-r', dir);
+  assert.deepEqual(splitRead([a, b], reads, false), { todo: [b], done: [a] });
+  assert.deepEqual(splitRead([a, b], reads, true), { todo: [a, b], done: [] });
+  fs.writeFileSync(path.join(dir, 'runs', 'run-r', 'request.json'), JSON.stringify({ posts: [{ url: a.url, own: false }] }));
+  const run = require('node:child_process').spawnSync(process.execPath, [path.join(__dirname, '..', 'scripts', 'fetch.js'), '--run', 'run-r', '--plan'],
+    { env: { ...process.env, COMMENT_THEMES_DATA_DIR: dir }, encoding: 'utf8' });
+  assert.equal(run.status, 0, run.stdout + run.stderr);
+  assert.match(run.stdout, /Plan for run-r: 0 posts/);
+  assert.match(run.stdout, /already read for this request \(2026-11-22 08:28 UTC, 704 comments\); not read again/);
+});
