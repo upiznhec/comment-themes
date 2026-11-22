@@ -129,3 +129,10 @@ Found, and what changed:
 Checks: `npm test`, 37 tests pass. The bridge, run live with the sign-in from the test: signed in as the video's account, 4 of the 4 comments read and imported, the caption kept; free. The full list with times is in the test's findings file kept with its screenshots.
 
 Still to do: the remaining Claude Code test requests, and the Codex test.
+
+## 2026-11-21, Codex: the TikTok connector, before the Codex test
+
+The user wants to record the Codex test, so they first tried the TikTok Social connector in Codex on its own (the Codex app inside the ChatGPT desktop app, Codex 0.171). They worked out the steps with ChatGPT, in two chats outside Codex, then did them in the app. Codex's records and logs give this order: Settings, MCP servers, Add server; Name `tiktok-social`, type Streamable HTTP, the connector's URL; Save (23:03); Authenticate, and the sign-in on TikTok's page (23:07); Codex restarted twice (23:08 and 23:11). In a new chat (23:11), Codex called `account_user_get` (the account in the video link) and `account_user_comment_list_get` on one video, and showed its 4 comments, with the reading tools only. The menu names were checked against the labels in the app itself.
+
+Change: AGENTS.md section 4 gives these steps for the Codex app, and asks the agent to give the person, before they restart, one short message to paste into a new chat to carry on. A chat that was open before the sign-in may keep answering that authorization is required: a known Codex issue (openai/codex#29279); in this test the new chat worked at once.
+
