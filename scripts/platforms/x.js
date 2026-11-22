@@ -101,7 +101,8 @@ async function read(entry, ctx) {
   if (!id) throw new Error(`X: no post ID in ${entry.url}`);
   const tweet = (await xget(`tweets/${id}`, { 'tweet.fields': 'created_at,public_metrics,conversation_id' }, ctx)).data;
   ctx.cost.xPosts += 1;
-  if (!tweet) throw new Error(`X: post ${id} not found (deleted or protected?)`);
+  // In the DeepSeek test the agent had copied the link with one digit changed, and X answered "not found".
+  if (!tweet) throw new Error(`X: post ${id} not found: deleted, from a protected account, or the link was copied with a wrong digit (compare it with the link the person sent)`);
   const post = postInfo('x', id, entry.url, tweet.created_at, tweet.public_metrics?.reply_count ?? null);
   post.text = tweet.text || null;
   if (ctx.plan || post.comments === 0) return { posts: [post], records: [] };

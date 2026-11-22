@@ -2,6 +2,7 @@
 
 // Puts comments that did not come from fetch.js into the database:
 //   node scripts/import.js --tiktok-mcp <file.json> --post <link>   a TikTok Social connector answer for that video
+//        an answer of account_user_post_list_get needs --run <name> too: it keeps the video's own text
 //   node scripts/import.js --csv <file.csv> [--post <link>] [--platform <name>] [--own]
 //        columns: text (or comment), and if there are: author, time (or date), likes, url (or post_url), id
 //   node scripts/import.js --text <file.txt> [--post <link>] [--platform <name>] [--own]
@@ -17,6 +18,7 @@ const { addRecords, parseCsv, withoutText } = require('./lib/db');
 const { fromMcp } = require('./platforms/tiktok-mcp');
 const { toIso } = require('./platforms/common');
 const { accountOfUrl, platformOfUrl } = require('./lib/sources');
+const { savePosts } = require('./fetch');
 
 function option(name) {
   const i = process.argv.indexOf(`--${name}`);
@@ -56,6 +58,22 @@ function fromRows(rows, defaults) {
   });
 }
 
+// An answer of account_user_post_list_get (fields item_id, caption, comments, create_time) keeps the video's own
+// text in the request's posts.json, as fetch.js does for the other platforms. In the DeepSeek test the agent had
+// to be asked to look the caption up before it could say what the video was about.
+function keepVideoText(videos, post, run) {
+  if (!run) throw new Error('Give the request\'s name with --run, so that the video\'s text is kept with that request.');
+  const id = (String(post).match(/\/video\/(\d+)/) || [])[1];
+  const video = videos.find(item => String(item.item_id) === id) || (videos.length === 1 ? videos[0] : null);
+  if (!video) throw new Error('This answer does not list the video given with --post.');
+  savePosts(run, getDataDir(), [{
+    platform: 'tiktok', url: post, time: toIso(video.create_time),
+    comments: typeof video.comments === 'number' ? video.comments : null,
+    text: video.caption ? String(video.caption).slice(0, 2000) : null
+  }]);
+  console.log(`Kept the video's own text for the request ${run}.`);
+}
+
 function main() {
   const post = option('post') ? String(option('post')).trim() : null;
   const defaults = {
@@ -67,6 +85,10 @@ function main() {
     if (!post) throw new Error('Give the video\'s link with --post, as in the request.');
     const answer = withoutPictures(JSON.parse(fs.readFileSync(option('tiktok-mcp'), 'utf8')));
     fs.writeFileSync(option('tiktok-mcp'), JSON.stringify(answer, null, 2) + '\n', { mode: 0o600 });
+    if (Array.isArray(answer?.data?.videos)) {
+      keepVideoText(answer.data.videos, post, option('run'));
+      return;
+    }
     records = fromMcp(answer, post);
   } else if (option('csv')) {
     records = fromRows(parseCsv(fs.readFileSync(option('csv'), 'utf8')), defaults);

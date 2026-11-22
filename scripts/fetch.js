@@ -8,7 +8,7 @@
 //                                               reads no comments (a YouTube lookup costs 1 free unit, an X lookup
 //                                               US$0.005)
 //   node scripts/fetch.js --run <name>          reads them all
-//   options: --platform <name>  --post <part of a link>  --max-pages <n> (comment pages per post, default 30)
+//   options: --platform <name> (more than once, or a list)  --post <part of a link>  --max-pages <n> (comment pages per post, default 30)
 //            --no-replies (YouTube)
 // Own TikTok videos with the route "mcp" are read by the agent through the TikTok Social connector; this
 // script only lists them. Prints counts and costs, never comment text or names.
@@ -50,6 +50,23 @@ function arg(name, fallback) {
 }
 
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+// Every value of --name, given more than once or as a list ("--platform instagram,facebook"). In the DeepSeek
+// test the agent gave --platform twice and only the first platform was read.
+function argAll(name) {
+  const values = [];
+  process.argv.forEach((item, i) => {
+    if (item === `--${name}` && process.argv[i + 1]) values.push(process.argv[i + 1]);
+    else if (item.startsWith(`--${name}=`)) values.push(item.slice(name.length + 3));
+  });
+  return values.flatMap(value => value.split(',')).map(value => value.trim().toLowerCase()).filter(Boolean);
+}
+
+// The request's posts to read: on the platforms given (all if none), and matching --post if given.
+function pick(entries, { platforms = [], post = '' } = {}) {
+  const part = String(post).toLowerCase();
+  return entries.filter(entry => (!platforms.length || platforms.includes(entry.platform)) && (!part || entry.url.toLowerCase().includes(part)));
+}
 
 // The line for one post after reading it. Comments without any text are not stored, so it says how many.
 function readSummary(records, post) {
@@ -107,12 +124,10 @@ async function main() {
   const dataDir = getDataDir();
   loadEnvFile(dataDir);
   const plan = process.argv.includes('--plan');
-  const onlyPlatform = arg('platform');
-  const onlyPost = String(arg('post', '')).toLowerCase();
   let request;
   try { request = loadRequest(name, dataDir); } catch (error) { console.log(error.message); process.exit(1); }
   request.problems.forEach(problem => console.log(`Not read yet: ${problem}`));
-  const chosen = request.entries.filter(e => (!onlyPlatform || e.platform === onlyPlatform) && (!onlyPost || e.url.toLowerCase().includes(onlyPost)));
+  const chosen = pick(request.entries, { platforms: argAll('platform'), post: arg('post', '') });
   const ctx = { env: process.env, plan, maxPages: Number(arg('max-pages', 30)), noReplies: process.argv.includes('--no-replies'), cost: newCost(), notes: [] };
   ctx.progress = (entry, pages, count) => {
     if (pages % 10 === 0) console.log(`  ${entry.platform} ${entry.url}: ${plural(pages, 'page')} read, ${plural(count, 'comment')} so far`);
@@ -123,7 +138,7 @@ async function main() {
   for (const entry of chosen) {
     const label = `${entry.platform} (${entry.own === true ? 'own' : entry.own === false ? 'not own' : 'owner not said'}, ${entry.route}) ${entry.url}`;
     if (entry.route === 'mcp') {
-      console.log(`${label}: read by the agent through the TikTok Social connector, then imported with import.js --tiktok-mcp <file> --post <this link>.`);
+      console.log(`${label}: read through the TikTok Social connector, by the agent (then import.js --tiktok-mcp <file> --post <this link>) or, if the app cannot add the connector, with node scripts/tiktok-bridge.js --run ${name}.`);
       continue;
     }
     const missing = (NEEDS[entry.route === 'scrapecreators' ? 'scrapecreators' : entry.platform] || []).filter(key => !process.env[key]);
@@ -156,4 +171,4 @@ async function main() {
 
 if (require.main === module) main();
 
-module.exports = { estimate, readSummary, savePosts };
+module.exports = { estimate, pick, readSummary, savePosts };

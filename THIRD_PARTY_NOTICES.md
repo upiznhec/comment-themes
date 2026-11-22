@@ -18,3 +18,7 @@ This project is not affiliated with, sponsored by or endorsed by ScrapeCreators.
 ## Platforms
 
 YouTube, Instagram, Facebook, TikTok, X and Reddit are trademarks of their owners. The scripts use these platforms' official APIs where they exist; using them is subject to each platform's terms.
+
+## mcp-remote (used, not included)
+
+`scripts/tiktok-bridge.js` runs mcp-remote 0.16.4 (MIT License; first published by Glen Maddern at https://github.com/geelen/mcp-remote, now maintained at https://github.com/punkpeye/mcp-remote) through npx, to reach the TikTok Social connector from AI apps that cannot add it themselves. npm downloads it the first time the script is used; it is not part of this repository.

@@ -269,3 +269,29 @@ test('the line after reading a post says how many comments had no text, since th
   assert.equal(readSummary([{ text: 'ok' }, { text: '' }], {}), '2 comments read; 1 of them has no text and is not stored');
   assert.equal(readSummary([{ text: 'ok' }], { comments: 1 }), '1 comment read (the post shows 1)');
 });
+
+test('TikTok bridge: only the reading tools; pages and the replies beyond the three shown are read', async () => {
+  const { guard, readVideo, READ_TOOLS } = require('../scripts/tiktok-bridge');
+  assert.equal(READ_TOOLS.size, 4);
+  assert.throws(() => guard('account_user_comment_delete'), /not one of the connector's reading tools/);
+  const asked = [];
+  const answers = {
+    'list:': { code: 0, data: { has_more: true, cursor: 30, comments: [{ comment_id: 'a', replies: 5, reply_list: [{ comment_id: 'a1' }] }] } },
+    'list:30': { code: 0, data: { has_more: false, comments: [{ comment_id: 'b', replies: 0 }] } },
+    'reply:a:': { code: 0, data: { has_more: true, cursor: 30, comments: [{ comment_id: 'a2', parent_comment_id: 'a' }] } },
+    'reply:a:30': { code: 0, data: { has_more: false, comments: [{ comment_id: 'a3', parent_comment_id: 'a' }] } }
+  };
+  const call = async (tool, args) => {
+    asked.push([tool, args]);
+    const key = tool === 'account_user_comment_list_get' ? `list:${args.cursor ?? ''}` : `reply:${args.comment_id}:${args.cursor ?? ''}`;
+    return answers[key];
+  };
+  const saved = [];
+  const pages = await readVideo(call, (answer, suffix) => saved.push(suffix), '123', { maxPages: 10, total: 12 });
+  assert.equal(pages, 2);
+  assert.deepEqual(saved, ['1', 'a-1', 'a-2', '2']);
+  assert.equal(asked[0][1].sort_field, undefined);
+  const big = [];
+  await readVideo(async (tool, args) => { big.push(args); return { code: 0, data: { has_more: false, comments: [] } }; }, () => {}, '123', { total: 5000 });
+  assert.equal(big[0].sort_field, 'likes');
+});

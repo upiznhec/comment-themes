@@ -154,3 +154,21 @@ test('the Meta script asks for the app ID itself and points to the page with the
   assert.match(QUESTIONS.appId, /number after \/apps\//);
   assert.equal(secretPage('1234567890'), 'https://developers.facebook.com/apps/1234567890/settings/basic/');
 });
+
+test('several platforms can be read in one go, and a TikTok post list answer keeps the video\'s own text', () => {
+  const { pick } = require('../scripts/fetch');
+  const entries = [{ platform: 'instagram', url: 'https://www.instagram.com/p/A/' }, { platform: 'facebook', url: 'https://www.facebook.com/1/posts/2' }, { platform: 'x', url: 'https://x.com/a/status/3' }];
+  assert.deepEqual(pick(entries, { platforms: ['instagram', 'facebook'] }).map(e => e.platform), ['instagram', 'facebook']);
+  assert.equal(pick(entries, {}).length, 3);
+  assert.deepEqual(pick(entries, { post: 'status/3' }).map(e => e.platform), ['x']);
+  const dir = tempDir();
+  const link = 'https://www.tiktok.com/@sample/video/123';
+  const file = path.join(dir, 'tiktok-123-post.json');
+  fs.writeFileSync(file, JSON.stringify({ code: 0, data: { videos: [{ item_id: '123', caption: 'Scoreboard animation', comments: 4, create_time: 1775502000 }] } }));
+  const run = require('node:child_process').spawnSync(process.execPath, [path.join(__dirname, '..', 'scripts', 'import.js'), '--tiktok-mcp', file, '--post', link, '--run', 'run-3'],
+    { env: { ...process.env, COMMENT_THEMES_DATA_DIR: dir }, encoding: 'utf8' });
+  assert.equal(run.status, 0, run.stdout);
+  const [saved] = JSON.parse(fs.readFileSync(path.join(dir, 'runs', 'run-3', 'posts.json'), 'utf8'));
+  assert.equal(saved.text, 'Scoreboard animation');
+  assert.equal(saved.comments_shown, 4);
+});
